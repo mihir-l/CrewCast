@@ -4,20 +4,35 @@ import { listen } from "@tauri-apps/api/event";
 import "./App.css";
 
 function App() {
-  const [greetMsg, setGreetMsg] = useState("");
-  const [name, setName] = useState("");
   const [messages, setMessages] = useState<string[]>([]); // To store received messages
   const [messageToSend, setMessageToSend] = useState(""); // To store the message to send
+  const [ticket, setTicket] = useState(""); // To store the ticket for joining a topic
+  const [generatedTicket, setGeneratedTicket] = useState(""); // To store the generated ticket
 
-  async function greet() {
-    // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-    setGreetMsg(await invoke("greet", { name }));
-  }
-
+  // Function to send a message
   async function sendMessage() {
     if (messageToSend.trim() !== "") {
       await invoke("send_message", { message: messageToSend });
       setMessageToSend(""); // Clear the input field after sending
+    }
+  }
+
+  // Function to start a new topic
+  async function startNewTopic() {
+    const ticket = await invoke<string>("start_new_topic");
+    setGeneratedTicket(ticket); // Store the generated ticket
+    alert(`New topic started! Ticket: ${ticket}`);
+  }
+
+  // Function to join an existing topic
+  async function joinTopic() {
+    if (ticket.trim() !== "") {
+      try {
+        const joinedTicket = await invoke<string>("join_topic", { ticketKey: ticket });
+        alert(`Joined topic successfully! Ticket: ${joinedTicket}`);
+      } catch (error) {
+        alert(`Failed to join topic: ${error}`);
+      }
     }
   }
 
@@ -34,63 +49,65 @@ function App() {
   }, []);
 
   return (
-    <main className="container">
-      <h1>Welcome to Tauri + React</h1>
+    <div className="app">
+      <aside className="sidebar">
+        <h2>Topic Management</h2>
+        <button onClick={startNewTopic}>Start New Topic</button>
+        {generatedTicket && (
+          <p className="generated-ticket">
+            Generated Ticket: <code>{generatedTicket}</code>
+          </p>
+        )}
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            joinTopic();
+          }}
+        >
+          <input
+            id="ticket-input"
+            value={ticket}
+            onChange={(e) => setTicket(e.currentTarget.value)}
+            placeholder="Enter a ticket to join a topic..."
+          />
+          <button type="submit">Join Topic</button>
+        </form>
+      </aside>
 
-      <div className="row">
-        <a href="https://vite.dev" target="_blank">
-          <img src="/vite.svg" className="logo vite" alt="Vite logo" />
-        </a>
-        <a href="https://tauri.app" target="_blank">
-          <img src="/tauri.svg" className="logo tauri" alt="Tauri logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src="./assets/react.svg" className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <p>Click on the Tauri, Vite, and React logos to learn more.</p>
+      <main className="chat">
+        <header className="chat-header">
+          <h1>CrewCast Chat</h1>
+        </header>
 
-      <form
-        className="row"
-        onSubmit={(e) => {
-          e.preventDefault();
-          greet();
-        }}
-      >
-        <input
-          id="greet-input"
-          onChange={(e) => setName(e.currentTarget.value)}
-          placeholder="Enter a name..."
-        />
-        <button type="submit">Greet</button>
-      </form>
-      <p>{greetMsg}</p>
+        <div className="messages">
+          {messages.length > 0 ? (
+            messages.map((msg, index) => (
+              <p key={index} className="message">
+                {msg}
+              </p>
+            ))
+          ) : (
+            <p className="no-messages">No messages yet. Start a conversation!</p>
+          )}
+        </div>
 
-      <hr />
-
-      <h2>Messages</h2>
-      <div className="messages">
-        {messages.map((msg, index) => (
-          <p key={index}>{msg}</p>
-        ))}
-      </div>
-
-      <form
-        className="row"
-        onSubmit={(e) => {
-          e.preventDefault();
-          sendMessage();
-        }}
-      >
-        <input
-          id="message-input"
-          value={messageToSend}
-          onChange={(e) => setMessageToSend(e.currentTarget.value)}
-          placeholder="Enter a message to send..."
-        />
-        <button type="submit">Send Message</button>
-      </form>
-    </main>
+        <form
+          className="message-input"
+          onSubmit={(e) => {
+            e.preventDefault();
+            sendMessage();
+          }}
+        >
+          <input
+            id="message-input"
+            value={messageToSend}
+            onChange={(e) => setMessageToSend(e.currentTarget.value)}
+            placeholder="Type a message..."
+          />
+          <button type="submit">Send</button>
+        </form>
+      </main>
+    </div>
   );
 }
 

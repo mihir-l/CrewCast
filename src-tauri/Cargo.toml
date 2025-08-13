@@ -29,6 +29,15 @@ iroh-gossip = "0.91.0"
 rand = "0.8.5"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+sqlx = { version = "0.8.6", default-features = false, features = [
+    "runtime-tokio",
+    "macros",
+    "migrate",
+    "derive",
+    "sqlite",
+    "json",
+    "chrono",
+] }
 tauri = { version = "2", features = [] }
 tauri-plugin-opener = "2"
 tokio = { version = "1", features = ["full"] }
