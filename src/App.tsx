@@ -4,14 +4,68 @@ import { listen } from "@tauri-apps/api/event";
 import { ToastContainer, toast } from "react-toastify"; // Import Toastify
 import "react-toastify/dist/ReactToastify.css"; // Import Toastify styles
 import "./App.css";
+import { Node } from './types/node';
 
 function App() {
   const [ticket, setTicket] = useState(""); // To store the ticket for joining a topic
   const [topicId, setTopicId] = useState(""); // To store the topic ID for joining a topic
   const [generatedTicket, setGeneratedTicket] = useState(""); // To store the generated ticket
-  const [messages, setMessages] = useState<string[]>([]); // To store received gossip messages
+  const [messages, setMessages] = useState<
+    { content: string; sender: string; firstName?: string }[]
+  >([]); // To store received gossip messages
   const [topicName, setTopicName] = useState(""); // To store the topic name entered by the user
   const [chatMessage, setChatMessage] = useState(""); // To store the message to be sent
+  const [showUserForm, setShowUserForm] = useState(false); // To control the visibility of the user form
+  const [userInfo, setUserInfo] = useState({
+    email: "",
+    firstName: "",
+    lastName: "",
+    nodeId: "",
+  }); // To store user information
+  const [userCache, setUserCache] = useState<Record<string, { firstName: string }>>({}); // Cache for nodeId to User mapping
+  const [currentNode, setCurrentNode] = useState<Node | null>(null);
+
+  // Function to handle user form submission
+  async function handleUserFormSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!currentNode) {
+      toast.error("No node initialized");
+      return;
+    }
+    console.log(currentNode.nodeId);
+
+    try {
+      await invoke("create_user", {
+        user: {
+          email: userInfo.email,
+          firstName: userInfo.firstName,
+          lastName: userInfo.lastName,
+          nodeId: currentNode.nodeId, // Use node_id from currentNode
+        },
+      });
+      toast.success("User created successfully!");
+      setShowUserForm(false);
+    } catch (error) {
+      console.error("Failed to create user:", error);
+      toast.error("Failed to create user.");
+    }
+  }
+
+  // Function to fetch user by nodeId and cache it
+  async function fetchUserByNodeId(nodeId: string) {
+    if (userCache[nodeId]) {
+      return userCache[nodeId]; // Return cached user if available
+    }
+
+    try {
+      const user = await invoke<{ firstName: string }>("get_user_by_node_id", { nodeId: nodeId });
+      setUserCache((prevCache) => ({ ...prevCache, [nodeId]: user })); // Cache the user
+      return user;
+    } catch (error) {
+      console.error(`Failed to fetch user for nodeId ${nodeId}:`, error);
+      return { firstName: "Unknown" }; // Fallback if user fetch fails
+    }
+  }
 
   // Function to start a new topic
   async function startNewTopic() {
@@ -77,39 +131,108 @@ function App() {
     }
   }
 
+  // Function to check if user exists
+  async function checkAndInitializeUser() {
+    try {
+      // First check if node exists
+      const node = await invoke<Node>("get_node_by_id", { id: 1 });
+      setCurrentNode(node); // Store the node
+
+
+      try {
+        // Then check if user exists for this node
+        await invoke("get_user_by_node_id", { nodeId: node.nodeId });
+        // User exists, no need to show form
+      } catch (error) {
+        // User doesn't exist, show the form and pre-fill nodeId
+        setUserInfo(prev => ({ ...prev, nodeId: node.nodeId }));
+        setShowUserForm(true);
+      }
+    } catch (error) {
+      console.error("Failed to check node/user:", error);
+      toast.error("Failed to initialize application");
+    }
+  }
+
   useEffect(() => {
+    // Check for existing user on app start
+    checkAndInitializeUser();
+
     // Listen for the "gossip-message" event emitted from the backend
-    const unlisten = listen("gossip-message", (event) => {
+    const unlistenGossipMessage = listen("gossip-message", async (event) => {
       const message = event.payload as string;
       console.log("Gossip message received:", message);
 
       try {
         const parsedMessage = JSON.parse(message);
 
-        if (parsedMessage.type === "new_member") {
-          // Handle NewMember message
-          const newMember = parsedMessage.member;
-          toast.info(`New Member Joined: Node ID ${newMember}`);
-        }
-        if (parsedMessage.type === "check_in") {
+        if (parsedMessage.type === "chat") {
           const sender = parsedMessage.sender;
-          toast.info(`Check-in from: Node ID ${sender}`, { autoClose: 500 });
+          const user = await fetchUserByNodeId(sender);
+          setMessages((prevMessages) => [
+            ...prevMessages,
+            { content: parsedMessage.content, sender, firstName: user.firstName },
+          ]);
+        } else if (parsedMessage.type === "check_in") {
+          const newMember = parsedMessage.sender;
+          const user = await fetchUserByNodeId(newMember);
+          toast.info(`New Member Joined: ${user.firstName}`);
         }
-
-        // Add the message to the chat area
-        setMessages((prevMessages) => [...prevMessages, message]);
       } catch (error) {
         console.error("Failed to parse gossip message:", error);
       }
     });
 
     return () => {
-      unlisten.then((fn) => fn()); // Cleanup the listener on component unmount
+      unlistenGossipMessage.then((fn) => fn());
     };
-  }, []);
+  }, [userCache]); // Re-run effect if userCache changes
 
   return (
     <div className="app">
+      {showUserForm && (
+        <div className="user-form-overlay">
+          <form className="user-form" onSubmit={handleUserFormSubmit}>
+            <h2>Welcome! Please provide your information</h2>
+            <label>
+              Email:
+              <input
+                type="email"
+                value={userInfo.email}
+                onChange={(e) =>
+                  setUserInfo((prev) => ({ ...prev, email: e.target.value }))
+                }
+                required
+              />
+            </label>
+            <label>
+              First Name:
+              <input
+                type="text"
+                value={userInfo.firstName}
+                onChange={(e) =>
+                  setUserInfo((prev) => ({ ...prev, firstName: e.target.value }))
+                }
+                required
+              />
+            </label>
+            <label>
+              Last Name:
+              <input
+                type="text"
+                value={userInfo.lastName}
+                onChange={(e) =>
+                  setUserInfo((prev) => ({ ...prev, lastName: e.target.value }))
+                }
+              />
+            </label>
+
+            <button type="submit">Submit</button>
+          </form>
+        </div>
+      )}
+
+      {/* Existing UI */}
       <aside className="sidebar">
         <h2>Topic Management</h2>
 
@@ -175,7 +298,7 @@ function App() {
           {messages.length > 0 ? (
             messages.map((msg, index) => (
               <p key={index} className="message">
-                {msg}
+                <strong>{msg.firstName || msg.sender}:</strong> {msg.content}
               </p>
             ))
           ) : (
@@ -199,8 +322,7 @@ function App() {
         </form>
       </main>
 
-      {/* Toast Container */}
-      <ToastContainer />
+      <ToastContainer autoClose={2000} />
     </div>
   );
 }

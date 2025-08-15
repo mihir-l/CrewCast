@@ -18,7 +18,7 @@ use crate::{
     database::{
         node::{Node, NodeOperations},
         topic::{Topic, TopicOperations},
-        user::User,
+        user::{User, UserOperations},
     },
     AppState,
 };
@@ -100,7 +100,7 @@ pub enum MessageType {
     Chat(ChatMessage),
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct UserInfo {
     pub email: String,
     pub first_name: String,
@@ -129,8 +129,20 @@ pub async fn subscribe(
 ) -> Result<()> {
     receiver.joined().await.unwrap();
 
-    let state = app_handle.state::<Mutex<UserInfo>>();
-    let user_info = state.lock().await.clone();
+    let user_info = {
+        let state = app_handle.state::<Mutex<UserInfo>>();
+        let user_info = state.lock().await.clone();
+        user_info
+    };
+    app_handle.emit(
+        "gossip-message",
+        serde_json::json!({
+            "type": "this_user",
+            "member": node_id,
+            "meta": user_info,
+        })
+        .to_string(),
+    )?;
     let check_in_fut = tokio::spawn(async move {
         let user_info = user_info.clone();
         loop {
@@ -157,11 +169,13 @@ pub async fn subscribe(
                     let state = app_handle.state::<Mutex<AppState>>();
                     let new_member = data.sender;
                     let _ =
-                        update_topic(state, data.topic_id, new_member.clone(), data.meta).await?;
+                        update_topic(state, data.topic_id, new_member.clone(), data.meta.clone())
+                            .await?;
 
                     serde_json::json!({
                         "type": "check_in",
                         "sender": new_member,
+                        "meta": data.meta
                     })
                     .to_string()
                 }
@@ -191,6 +205,24 @@ async fn update_topic(
     let db = &state.lock().await.db;
     let topic = db.get_topic_by_topic_id(topic_id).await?;
 
+    let node = match db.get_node_by_node_id(member.clone()).await {
+        Ok(node) => node,
+        Err(_) => {
+            let node = Node::new(member.clone(), None);
+
+            db.create_node(node).await?
+        }
+    };
+    if !db.get_user_by_node_id(node.id).await.is_ok() {
+        let user = User::new(
+            user_info.email,
+            user_info.first_name,
+            user_info.last_name,
+            Some(node.id),
+        );
+        let _ = db.create_user(user).await?;
+    }
+
     // Ensure that the new member is not already present in the database
     if topic.get_peers().contains(&member) {
         return Ok(topic);
@@ -202,15 +234,7 @@ async fn update_topic(
         existing_members
     } else {
         // If this member is not present in the topic, try to add it to the nodes table as well
-        if !db.get_node_by_node_id(member.clone()).await.is_ok() {
-            let node = Node::new(member.clone(), None);
-            let user = User::new(
-                user_info.email,
-                user_info.first_name,
-                user_info.last_name,
-                Some(node.id),
-            );
-        }
+
         vec![member.clone()]
     };
 

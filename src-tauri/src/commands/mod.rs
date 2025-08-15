@@ -13,6 +13,7 @@ use crate::{
     AppState,
 };
 
+pub(crate) mod node;
 pub(crate) mod user;
 
 #[tauri::command]

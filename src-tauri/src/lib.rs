@@ -1,7 +1,8 @@
 use crate::{
-    comm::endpoint::{create_secret, CommState},
+    comm::endpoint::{create_secret, CommState, UserInfo},
     database::{
         node::{Node, NodeOperations},
+        user::{User, UserOperations},
         Db,
     },
 };
@@ -26,7 +27,10 @@ pub fn run() {
             commands::start_new_topic,
             commands::join_topic_with_ticket,
             commands::join_topic_with_id,
-            commands::user::get_user_by_node_id
+            commands::user::get_user_by_node_id,
+            commands::user::get_user_by_id,
+            commands::user::create_user,
+            commands::node::get_node_by_id
         ])
         .setup(|app| {
             async_runtime::block_on(async {
@@ -46,10 +50,8 @@ pub fn run() {
                 let pool = Db::init(&db_path.to_string_lossy().to_string(), password)
                     .await
                     .expect("failed to initialize database");
-                let app_handle = app.handle();
-                let endpoint = init_node(&pool, app_handle)
-                    .await
-                    .expect("failed to initialize node");
+
+                let endpoint = init_node(&pool).await.expect("failed to initialize node");
                 let app_state = AppState {
                     db: pool,
                     comm: CommState::init_from_endpoint(endpoint)
@@ -57,6 +59,18 @@ pub fn run() {
                         .expect("failed to initialize comm state"),
                 };
 
+                match &app_state.db.get_user_by_id(1).await {
+                    Ok(user) => {
+                        app.manage(Mutex::new(UserInfo {
+                            email: user.email.clone(),
+                            first_name: user.first_name.clone(),
+                            last_name: user.last_name.clone(),
+                        }));
+                    }
+                    Err(_) => {
+                        app.manage(Mutex::new(UserInfo::default()));
+                    }
+                }
                 app.manage(Mutex::new(app_state));
             });
 
@@ -83,7 +97,7 @@ pub fn run() {
     });
 }
 
-async fn init_node(db: &database::Db, app_handle: &AppHandle) -> Result<Endpoint, anyhow::Error> {
+async fn init_node(db: &database::Db) -> Result<Endpoint, anyhow::Error> {
     // Try to get node with id 1
     let endpoint = match db.get_node_by_id(1).await {
         Ok(node) => comm::endpoint::create_endpoint(node.secret_key.unwrap())
@@ -100,7 +114,6 @@ async fn init_node(db: &database::Db, app_handle: &AppHandle) -> Result<Endpoint
                 secret_key: Some(secret_key),
             };
             db.create_node(node).await?;
-            app_handle.emit("node_init", endpoint.node_id().to_string());
             endpoint
         }
     };
