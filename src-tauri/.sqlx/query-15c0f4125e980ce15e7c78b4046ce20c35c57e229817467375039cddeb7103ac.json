@@ -1,0 +1,32 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            INSERT INTO nodes (node_id, secret_key)\n            VALUES ($1, $2)\n            RETURNING id, node_id, secret_key\n            ",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "node_id",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "secret_key",
+        "ordinal": 2,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "15c0f4125e980ce15e7c78b4046ce20c35c57e229817467375039cddeb7103ac"
+}
