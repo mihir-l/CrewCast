@@ -18,6 +18,7 @@ use crate::{
     database::{
         node::{Node, NodeOperations},
         topic::{Topic, TopicOperations},
+        user::User,
     },
     AppState,
 };
@@ -91,23 +92,26 @@ pub fn new_topic() -> TopicId {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum MessageType {
-    // This type will be sent by each new node that joins the topic
-    // Will be used by all the node in the topic to update their topic entry with the new member
-    NewMember(NewMemberMessage),
-
     // This type will be sent by each node in the topic as a heartbeat
     // Will be used to let other nodes know they are still active in the topic
-    CheckIn(NewMemberMessage),
+    CheckIn(CheckInMessage),
 
     // This type will be sent by any node that want to share a message by its user
     Chat(ChatMessage),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
-pub struct NewMemberMessage {
+pub struct UserInfo {
+    pub email: String,
+    pub first_name: String,
+    pub last_name: Option<String>,
+}
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+pub struct CheckInMessage {
     pub topic_id: String,
     pub sender: String,
     pub ts: i64,
+    pub meta: UserInfo,
 }
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct ChatMessage {
@@ -125,15 +129,19 @@ pub async fn subscribe(
 ) -> Result<()> {
     receiver.joined().await.unwrap();
 
+    let state = app_handle.state::<Mutex<UserInfo>>();
+    let user_info = state.lock().await.clone();
     let check_in_fut = tokio::spawn(async move {
+        let user_info = user_info.clone();
         loop {
-            let new_member_message = MessageType::CheckIn(NewMemberMessage {
+            let check_in_message = MessageType::CheckIn(CheckInMessage {
                 topic_id: topic_id.clone(),
                 sender: node_id.clone(),
                 ts: chrono::Utc::now().timestamp(),
+                meta: user_info.clone(),
             });
             sender
-                .broadcast(serde_json::to_vec(&new_member_message).unwrap().into())
+                .broadcast(serde_json::to_vec(&check_in_message).unwrap().into())
                 .await
                 .ok();
             tokio::time::sleep(std::time::Duration::from_secs(30)).await;
@@ -145,26 +153,15 @@ pub async fn subscribe(
             let message_type = serde_json::from_slice::<MessageType>(&message.content)
                 .map_err(|e| anyhow::anyhow!("Failed to deserialize message: {}", e))?;
             let to_be_emitted = match message_type {
-                MessageType::NewMember(data) => {
-                    // Handle new member message
-                    let state = app_handle.state::<Mutex<AppState>>();
-                    let new_member = data.sender;
-                    let topic = update_topic(state, data.topic_id, new_member.clone()).await?;
-                    serde_json::json!({
-                        "type": "new_member",
-                        "topic": topic,
-                        "member": new_member[0..5],
-                    })
-                    .to_string()
-                }
                 MessageType::CheckIn(data) => {
                     let state = app_handle.state::<Mutex<AppState>>();
                     let new_member = data.sender;
-                    let _ = update_topic(state, data.topic_id, new_member.clone()).await?;
+                    let _ =
+                        update_topic(state, data.topic_id, new_member.clone(), data.meta).await?;
 
                     serde_json::json!({
                         "type": "check_in",
-                        "sender": new_member[0..5],
+                        "sender": new_member,
                     })
                     .to_string()
                 }
@@ -172,7 +169,7 @@ pub async fn subscribe(
                     // Handle chat message
                     serde_json::json!({
                         "type": "chat",
-                        "sender": content.sender[0..5],
+                        "sender": content.sender,
                         "content": content.content,
                     })
                     .to_string()
@@ -189,6 +186,7 @@ async fn update_topic(
     state: State<'_, Mutex<AppState>>,
     topic_id: String,
     member: String,
+    user_info: UserInfo,
 ) -> Result<Topic> {
     let db = &state.lock().await.db;
     let topic = db.get_topic_by_topic_id(topic_id).await?;
@@ -206,7 +204,12 @@ async fn update_topic(
         // If this member is not present in the topic, try to add it to the nodes table as well
         if !db.get_node_by_node_id(member.clone()).await.is_ok() {
             let node = Node::new(member.clone(), None);
-            db.create_node(node).await?;
+            let user = User::new(
+                user_info.email,
+                user_info.first_name,
+                user_info.last_name,
+                Some(node.id),
+            );
         }
         vec![member.clone()]
     };

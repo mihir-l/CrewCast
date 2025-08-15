@@ -145,11 +145,9 @@ impl TopicOperations for Db {
             )
             .fetch_one(&self.0)
             .await?;
-            if record.id.is_none() {
-                return Err(anyhow::anyhow!("Topic not found"));
-            }
+
             let topic = Topic {
-                id: record.id.unwrap(),
+                id: record.id,
                 topic_id: record.topic_id,
                 name: record.name,
                 owner: record.owner,

@@ -1,0 +1,32 @@
+{
+  "db_name": "SQLite",
+  "query": "\n                SELECT id, node_id, secret_key\n                FROM nodes\n                WHERE node_id = $1\n            ",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "node_id",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "secret_key",
+        "ordinal": 2,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "a15460e9004ac5fa5fae371912cdc88cf953530cde34197970502b8f12b842c6"
+}

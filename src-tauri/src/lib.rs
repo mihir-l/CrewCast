@@ -6,7 +6,7 @@ use crate::{
     },
 };
 use iroh::Endpoint;
-use tauri::{async_runtime, Manager};
+use tauri::{async_runtime, AppHandle, Emitter, Manager};
 use tokio::sync::Mutex;
 mod comm;
 mod commands;
@@ -25,7 +25,8 @@ pub fn run() {
             commands::send_message,
             commands::start_new_topic,
             commands::join_topic_with_ticket,
-            commands::join_topic_with_id
+            commands::join_topic_with_id,
+            commands::user::get_user_by_node_id
         ])
         .setup(|app| {
             async_runtime::block_on(async {
@@ -45,7 +46,10 @@ pub fn run() {
                 let pool = Db::init(&db_path.to_string_lossy().to_string(), password)
                     .await
                     .expect("failed to initialize database");
-                let endpoint = init_node(&pool).await.expect("failed to initialize node");
+                let app_handle = app.handle();
+                let endpoint = init_node(&pool, app_handle)
+                    .await
+                    .expect("failed to initialize node");
                 let app_state = AppState {
                     db: pool,
                     comm: CommState::init_from_endpoint(endpoint)
@@ -79,7 +83,7 @@ pub fn run() {
     });
 }
 
-async fn init_node(db: &database::Db) -> Result<Endpoint, anyhow::Error> {
+async fn init_node(db: &database::Db, app_handle: &AppHandle) -> Result<Endpoint, anyhow::Error> {
     // Try to get node with id 1
     let endpoint = match db.get_node_by_id(1).await {
         Ok(node) => comm::endpoint::create_endpoint(node.secret_key.unwrap())
@@ -96,6 +100,7 @@ async fn init_node(db: &database::Db) -> Result<Endpoint, anyhow::Error> {
                 secret_key: Some(secret_key),
             };
             db.create_node(node).await?;
+            app_handle.emit("node_init", endpoint.node_id().to_string());
             endpoint
         }
     };

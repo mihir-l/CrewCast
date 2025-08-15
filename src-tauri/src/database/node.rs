@@ -77,7 +77,8 @@ impl NodeOperations for Db {
         node_id: String,
     ) -> impl std::future::Future<Output = Result<Node>> + Send {
         async move {
-            let record = sqlx::query!(
+            let node = sqlx::query_as!(
+                Node,
                 r#"
                 SELECT id, node_id, secret_key
                 FROM nodes
@@ -88,14 +89,6 @@ impl NodeOperations for Db {
             .fetch_one(&self.0)
             .await?;
 
-            if record.id.is_none() {
-                return Err(anyhow::anyhow!("Node not found"));
-            }
-            let node = Node {
-                id: record.id.unwrap(),
-                node_id: record.node_id,
-                secret_key: record.secret_key,
-            };
             Ok(node)
         }
     }

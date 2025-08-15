@@ -1,0 +1,44 @@
+{
+  "db_name": "SQLite",
+  "query": "\n                UPDATE topics\n                SET members = $1\n                WHERE id = $2\n                RETURNING id, topic_id, owner, members, name\n                ",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "topic_id",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "owner",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "members",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "name",
+        "ordinal": 4,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      false
+    ]
+  },
+  "hash": "a6b030dbd75dc13d7cb8844f5611410dec99a843faba894ad20e9db51e9b8664"
+}
