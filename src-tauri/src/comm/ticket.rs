@@ -22,8 +22,8 @@ impl Ticket {
         serde_json::to_vec(self).expect("serde_json::to_vec is infallible")
     }
 
-    pub fn new(topic: String, nodes: Vec<String>) -> Result<Self> {
-        let topic_id = TopicId::from_str(&topic)?;
+    pub fn new(topic: &str, nodes: Vec<String>) -> Result<Self> {
+        let topic_id = TopicId::from_str(topic)?;
         let node_ids: Result<Vec<NodeId>> = nodes
             .into_iter()
             .map(|n| NodeId::from_str(&n).map_err(Into::into)) // Convert KeyParsingError to anyhow::Error
@@ -32,6 +32,10 @@ impl Ticket {
             topic: topic_id,
             nodes: node_ids?,
         })
+    }
+
+    pub fn nodes_to_string(&self) -> Vec<String> {
+        self.nodes.iter().map(|n| n.to_string()).collect()
     }
 }
 

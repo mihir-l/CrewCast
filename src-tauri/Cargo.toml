@@ -20,6 +20,7 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 anyhow = "1.0.98"
 base64 = "0.22.1"
+chrono = "0.4.41"
 data-encoding = "2.9.0"
 futures-lite = "2.6.1"
 iroh = { version = "0.91.1", default-features = false, features = [
@@ -38,6 +39,6 @@ sqlx = { version = "0.8.6", default-features = false, features = [
     "json",
     "chrono",
 ] }
-tauri = { version = "2", features = [] }
+tauri = { version = "2", features = ["devtools"] }
 tauri-plugin-opener = "2"
 tokio = { version = "1", features = ["full"] }

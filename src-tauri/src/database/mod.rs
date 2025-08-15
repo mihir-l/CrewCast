@@ -4,6 +4,7 @@ use anyhow::Result;
 use sqlx::{migrate::Migrator, sqlite::SqliteConnectOptions, Pool, Sqlite};
 
 pub(crate) mod node;
+pub(crate) mod topic;
 static MIGRATOR: Migrator = sqlx::migrate!();
 
 #[derive(Debug)]

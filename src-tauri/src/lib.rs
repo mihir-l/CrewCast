@@ -24,7 +24,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::send_message,
             commands::start_new_topic,
-            commands::join_topic
+            commands::join_topic_with_ticket,
+            commands::join_topic_with_id
         ])
         .setup(|app| {
             async_runtime::block_on(async {
