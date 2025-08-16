@@ -829,7 +829,6 @@ name = "crewcast"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "base64 0.22.1",
  "chrono",
  "data-encoding",
  "futures-lite",
@@ -842,6 +841,7 @@ dependencies = [
  "tauri",
  "tauri-build",
  "tauri-plugin-opener",
+ "thiserror 2.0.14",
  "tokio",
 ]
 

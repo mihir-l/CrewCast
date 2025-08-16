@@ -1,6 +1,5 @@
 use super::Db;
 use anyhow::Result;
-use iroh::NodeId;
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 
