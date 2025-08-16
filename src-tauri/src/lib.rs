@@ -1,12 +1,13 @@
 use crate::{
-    comm::endpoint::{create_secret, CommState},
+    comm::endpoint::{create_secret, CommState, UserInfo},
     database::{
         node::{Node, NodeOperations},
+        user::{User, UserOperations},
         Db,
     },
 };
 use iroh::Endpoint;
-use tauri::{async_runtime, Manager};
+use tauri::{async_runtime, AppHandle, Emitter, Manager};
 use tokio::sync::Mutex;
 mod comm;
 mod commands;
@@ -25,7 +26,11 @@ pub fn run() {
             commands::send_message,
             commands::start_new_topic,
             commands::join_topic_with_ticket,
-            commands::join_topic_with_id
+            commands::join_topic_with_id,
+            commands::user::get_user_by_node_id,
+            commands::user::get_user_by_id,
+            commands::user::create_user,
+            commands::node::get_node_by_id
         ])
         .setup(|app| {
             async_runtime::block_on(async {
@@ -45,6 +50,7 @@ pub fn run() {
                 let pool = Db::init(&db_path.to_string_lossy().to_string(), password)
                     .await
                     .expect("failed to initialize database");
+
                 let endpoint = init_node(&pool).await.expect("failed to initialize node");
                 let app_state = AppState {
                     db: pool,
@@ -53,6 +59,18 @@ pub fn run() {
                         .expect("failed to initialize comm state"),
                 };
 
+                match &app_state.db.get_user_by_id(1).await {
+                    Ok(user) => {
+                        app.manage(Mutex::new(UserInfo {
+                            email: user.email.clone(),
+                            first_name: user.first_name.clone(),
+                            last_name: user.last_name.clone(),
+                        }));
+                    }
+                    Err(_) => {
+                        app.manage(Mutex::new(UserInfo::default()));
+                    }
+                }
                 app.manage(Mutex::new(app_state));
             });
 

@@ -13,6 +13,9 @@ use crate::{
     AppState,
 };
 
+pub(crate) mod node;
+pub(crate) mod user;
+
 #[tauri::command]
 pub async fn send_message(app_state: State<'_, Mutex<AppState>>, message: String) -> Result<()> {
     let state = app_state.lock().await;
