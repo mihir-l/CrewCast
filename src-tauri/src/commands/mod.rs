@@ -1,7 +1,7 @@
 use std::str::FromStr;
 
 use anyhow::anyhow;
-use tauri::{AppHandle, Result, State};
+use tauri::{AppHandle, State};
 use tokio::sync::Mutex;
 
 use crate::{
@@ -10,6 +10,7 @@ use crate::{
         ticket::Ticket,
     },
     database::topic::{Topic, TopicOperations},
+    error::{Error, Result},
     AppState,
 };
 
@@ -29,7 +30,7 @@ pub async fn send_message(app_state: State<'_, Mutex<AppState>>, message: String
         sender
             .broadcast(message.into())
             .await
-            .map_err(|e| anyhow!("Failed to send message: {}", e))?;
+            .map_err(|e| Error::GossipSubscription(format!("Failed to send message: {}", e)))?;
     }
     Ok(())
 }
@@ -53,7 +54,7 @@ pub async fn start_new_topic(
     let (sender, receiver) = gossip
         .subscribe(ticket.topic, ticket.nodes.clone())
         .await
-        .unwrap()
+        .map_err(|e| Error::GossipSubscription(format!("Failed to subscribe to gossip: {}", e)))?
         .split();
 
     let sender_copy = sender.clone();
@@ -95,17 +96,20 @@ pub async fn join_topic_with_ticket(
 
     let parts = key.split(':').collect::<Vec<_>>();
     if parts.len() != 2 {
-        return Err(anyhow!("Invalid ticket format, expected 'name:ticket'").into());
+        return Err(Error::Generic(anyhow!(
+            "Invalid ticket format, expected 'name:ticket'"
+        )));
     }
     let (name, ticket_key) = (parts[0], parts[1]);
 
-    let ticket =
-        Ticket::from_str(&ticket_key).map_err(|e| anyhow!("Failed to parse ticket: {}", e))?;
+    let ticket = Ticket::from_str(&ticket_key)?;
 
     // Create the topic in the db
     let nodes_str = ticket.nodes_to_string();
     let (owner, members) = nodes_str.split_first().ok_or_else(|| {
-        anyhow!("Ticket must contain at least one node as owner and possibly more members")
+        Error::Generic(anyhow!(
+            "Ticket must contain at least one node as owner and possibly more members"
+        ))
     })?;
 
     let current_node_id = endpoint.node_id().to_string();
@@ -125,7 +129,7 @@ pub async fn join_topic_with_ticket(
     let (sender, receiver) = gossip
         .subscribe(ticket.topic, peer_ids)
         .await
-        .unwrap()
+        .map_err(|e| Error::GossipSubscription(format!("Failed to subscribe to gossip: {}", e)))?
         .split();
     let sender_copy = sender.clone();
     let current_node_id_copy = current_node_id.clone();
@@ -168,7 +172,7 @@ pub async fn join_topic_with_id(
     let (sender, receiver) = gossip
         .subscribe(ticket.topic, ticket.nodes.clone())
         .await
-        .unwrap()
+        .map_err(|e| Error::GossipSubscription(format!("Failed to subscribe to gossip: {}", e)))?
         .split();
 
     let sender_copy = sender.clone();

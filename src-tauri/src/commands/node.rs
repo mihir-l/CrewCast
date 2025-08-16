@@ -1,8 +1,9 @@
-use tauri::{Result, State};
+use tauri::State;
 use tokio::sync::Mutex;
 
 use crate::{
     database::node::{Node, NodeOperations},
+    error::Result,
     AppState,
 };
 

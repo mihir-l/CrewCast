@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
 
-use tauri::{Result, State};
+use tauri::State;
 
 use crate::{
     comm::endpoint::UserInfo,
@@ -9,28 +9,19 @@ use crate::{
         node::NodeOperations,
         user::{User, UserOperations},
     },
+    error::Result,
     AppState,
 };
 
 #[tauri::command]
 pub async fn get_user_by_node_id(
     app_state: State<'_, Mutex<AppState>>,
-    user_info: State<'_, Mutex<UserInfo>>,
     node_id: String,
 ) -> Result<User> {
     let state = app_state.lock().await;
     let db = &state.db;
     let node = db.get_node_by_node_id(node_id).await?;
     let user = db.get_user_by_node_id(node.id).await?;
-
-    let mut user_info = user_info.lock().await;
-    if user.id == 1 && user_info.email.is_empty() {
-        *user_info = UserInfo {
-            email: user.email.clone(),
-            first_name: user.first_name.clone(),
-            last_name: user.last_name.clone(),
-        };
-    }
 
     Ok(user)
 }

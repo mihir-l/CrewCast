@@ -1,5 +1,3 @@
-use anyhow::Result;
-use base64::prelude::*;
 use futures_lite::StreamExt;
 use iroh::{
     protocol::{Router, RouterBuilder},
@@ -20,6 +18,7 @@ use crate::{
         topic::{Topic, TopicOperations},
         user::{User, UserOperations},
     },
+    error::{Error, Result},
     AppState,
 };
 
@@ -33,10 +32,7 @@ pub(crate) struct CommState {
 impl CommState {
     pub async fn init_from_endpoint(endpoint: Endpoint) -> Result<Self> {
         let gossip = new_gossip(endpoint.clone()).await?;
-        let router = new_router(endpoint.clone(), gossip.clone())
-            .await
-            .expect("Failed to create router")
-            .spawn();
+        let router = new_router(endpoint.clone(), gossip.clone()).await?.spawn();
         Ok(Self {
             endpoint,
             gossip,
@@ -53,12 +49,11 @@ impl CommState {
 }
 
 pub async fn create_endpoint(encoded_secret: String) -> Result<Endpoint> {
-    let decoded = BASE64_STANDARD
-        .decode(encoded_secret)
-        .map_err(|e| anyhow::anyhow!("Invalid secret key: {}", e))?;
-    let key_bytes: [u8; 32] = decoded
-        .try_into()
-        .map_err(|_| anyhow::anyhow!("Secret key must be 32 bytes long"))?;
+    let mut key_bytes = [0u8; 32];
+
+    data_encoding::BASE32_NOPAD
+        .decode_mut(encoded_secret.as_bytes(), &mut key_bytes)
+        .map_err(|_| Error::EncodeDecode("Error Decoding Secret".to_string()))?;
 
     let secret_key = SecretKey::from_bytes(&key_bytes);
 
@@ -67,7 +62,8 @@ pub async fn create_endpoint(encoded_secret: String) -> Result<Endpoint> {
         .discovery_n0()
         .discovery_local_network()
         .bind()
-        .await?;
+        .await
+        .map_err(|e| Error::Endpoint(format!("Failed to bind endpoint: {}", e)))?;
     Ok(endpoint)
 }
 
@@ -83,7 +79,7 @@ pub async fn new_router(endpoint: Endpoint, gossip: Gossip) -> Result<RouterBuil
 
 pub fn create_secret() -> String {
     let secret_key = SecretKey::generate(rand::rngs::OsRng);
-    BASE64_STANDARD.encode(secret_key.to_bytes())
+    data_encoding::BASE32_NOPAD.encode(&secret_key.to_bytes())
 }
 
 pub fn new_topic() -> TopicId {
@@ -127,22 +123,16 @@ pub async fn subscribe(
     node_id: String,
     topic_id: String,
 ) -> Result<()> {
-    receiver.joined().await.unwrap();
+    receiver
+        .joined()
+        .await
+        .map_err(|e| Error::GossipSubscription(format!("Failed to join gossip: {}", e)))?;
 
     let user_info = {
         let state = app_handle.state::<Mutex<UserInfo>>();
         let user_info = state.lock().await.clone();
         user_info
     };
-    app_handle.emit(
-        "gossip-message",
-        serde_json::json!({
-            "type": "this_user",
-            "member": node_id,
-            "meta": user_info,
-        })
-        .to_string(),
-    )?;
     let check_in_fut = tokio::spawn(async move {
         let user_info = user_info.clone();
         loop {
@@ -152,18 +142,16 @@ pub async fn subscribe(
                 ts: chrono::Utc::now().timestamp(),
                 meta: user_info.clone(),
             });
-            sender
-                .broadcast(serde_json::to_vec(&check_in_message).unwrap().into())
-                .await
-                .ok();
+            if let Some(message) = serde_json::to_vec(&check_in_message).ok() {
+                sender.broadcast(message.into()).await.ok();
+            }
             tokio::time::sleep(std::time::Duration::from_secs(30)).await;
         }
     });
 
-    while let Some(event) = receiver.try_next().await? {
-        if let Event::Received(message) = event {
-            let message_type = serde_json::from_slice::<MessageType>(&message.content)
-                .map_err(|e| anyhow::anyhow!("Failed to deserialize message: {}", e))?;
+    while let Some(event) = receiver.try_next().await.ok() {
+        if let Some(Event::Received(message)) = event {
+            let message_type = serde_json::from_slice::<MessageType>(&message.content)?;
             let to_be_emitted = match message_type {
                 MessageType::CheckIn(data) => {
                     let state = app_handle.state::<Mutex<AppState>>();

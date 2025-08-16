@@ -2,16 +2,18 @@ use crate::{
     comm::endpoint::{create_secret, CommState, UserInfo},
     database::{
         node::{Node, NodeOperations},
-        user::{User, UserOperations},
+        user::UserOperations,
         Db,
     },
+    error::Result,
 };
 use iroh::Endpoint;
-use tauri::{async_runtime, AppHandle, Emitter, Manager};
+use tauri::{async_runtime, Manager};
 use tokio::sync::Mutex;
 mod comm;
 mod commands;
 mod database;
+mod error;
 
 pub(crate) struct AppState {
     pub db: Db,
@@ -97,7 +99,7 @@ pub fn run() {
     });
 }
 
-async fn init_node(db: &database::Db) -> Result<Endpoint, anyhow::Error> {
+async fn init_node(db: &database::Db) -> Result<Endpoint> {
     // Try to get node with id 1
     let endpoint = match db.get_node_by_id(1).await {
         Ok(node) => comm::endpoint::create_endpoint(node.secret_key.unwrap())
