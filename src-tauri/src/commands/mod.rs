@@ -1,12 +1,15 @@
-use std::str::FromStr;
+use std::{path::PathBuf, str::FromStr};
 
 use anyhow::anyhow;
-use tauri::{AppHandle, State};
+use futures_lite::StreamExt;
+use iroh::Watcher;
+use iroh_blobs::{api::downloader::DownloadProgessItem, ticket::BlobTicket};
+use tauri::{AppHandle, Emitter, State};
 use tokio::sync::Mutex;
 
 use crate::{
     comm::{
-        endpoint::{subscribe, ChatMessage, MessageType},
+        endpoint::{subscribe, ChatMessage, FileMessage, MessageType},
         ticket::Ticket,
     },
     database::topic::{Topic, TopicOperations},
@@ -192,4 +195,94 @@ pub async fn join_topic_with_id(
     state.comm.topic_sender = Some(sender);
 
     Ok(topic)
+}
+
+#[tauri::command]
+pub async fn share_file(app_state: State<'_, Mutex<AppState>>, file_path: String) -> Result<()> {
+    let state = app_state.lock().await;
+    let topic_sender = state.comm.topic_sender.clone();
+    let endpoint = state.comm.endpoint.clone();
+    let node_id = endpoint.node_id().to_string();
+
+    let blobs = state.comm.blobs.clone();
+
+    // Add file to blob store
+    let file_path = PathBuf::from(file_path);
+    let file_name = file_path
+        .file_name()
+        .ok_or_else(|| Error::Generic(anyhow!("Invalid file path")))?
+        .to_string_lossy()
+        .to_string();
+
+    let file_tag = blobs.store().add_path(file_path.clone()).await.unwrap();
+
+    let node_addr = endpoint.node_addr().get().unwrap();
+    let ticket = BlobTicket::new(node_addr, file_tag.hash, file_tag.format);
+
+    let message = MessageType::File(FileMessage {
+        file_name,
+        sender: node_id,
+        ts: chrono::Utc::now().timestamp(),
+        blob_ticket: ticket.to_string(),
+    });
+
+    if let Some(sender) = topic_sender {
+        sender
+            .broadcast(serde_json::to_vec(&message)?.into())
+            .await
+            .map_err(|e| Error::GossipSubscription(format!("Failed to send message: {}", e)))?;
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn download_file(
+    app_handle: AppHandle,
+    app_state: State<'_, Mutex<AppState>>,
+    ticket: String,
+    file_name: String,
+) -> Result<()> {
+    let state = app_state.lock().await;
+    let blobs = state.comm.blobs.clone();
+    let endpoint = state.comm.endpoint.clone();
+
+    let ticket = ticket
+        .parse::<BlobTicket>()
+        .map_err(|e| Error::Generic(anyhow!("Failed to parse blob ticket: {}", e)))?;
+
+    let downloader = blobs.store().downloader(&endpoint);
+
+    let progress = downloader.download(ticket.hash(), Some(ticket.node_addr().node_id));
+    let mut stream = progress
+        .stream()
+        .await
+        .map_err(|e| Error::Generic(anyhow!("Failed to create download stream: {}", e)))?;
+    while let Some(pg) = stream.next().await {
+        let app_handle = app_handle.clone();
+        let file_name = file_name.clone();
+        match pg {
+            DownloadProgessItem::Progress(pg_per) => {
+                app_handle.emit(
+                    "download-progress",
+                    serde_json::json!({
+                        "percentage": pg_per,
+                        "fileName": file_name
+                    })
+                    .to_string(),
+                )?;
+            }
+            _ => (),
+        }
+    }
+
+    let save_path = std::env::current_dir()?.join(file_name);
+    blobs
+        .store()
+        .blobs()
+        .export(ticket.hash(), save_path)
+        .await
+        .map_err(|e| Error::Generic(anyhow!("Failed to export blob: {}", e)))?;
+
+    Ok(())
 }

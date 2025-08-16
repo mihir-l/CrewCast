@@ -1,10 +1,18 @@
 import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { open } from '@tauri-apps/plugin-dialog';
 import { ToastContainer, toast } from "react-toastify"; // Import Toastify
+import { Node } from './types/node';
 import "react-toastify/dist/ReactToastify.css"; // Import Toastify styles
 import "./App.css";
-import { Node } from './types/node';
+
+interface SharedFile {
+  fileName: string;
+  sender: string;
+  blobTicket: string;
+  timestamp: number;
+}
 
 function App() {
   const [ticket, setTicket] = useState(""); // To store the ticket for joining a topic
@@ -24,6 +32,45 @@ function App() {
   }); // To store user information
   const [userCache, setUserCache] = useState<Record<string, { firstName: string }>>({}); // Cache for nodeId to User mapping
   const [currentNode, setCurrentNode] = useState<Node | null>(null);
+  const [sharedFiles, setSharedFiles] = useState<SharedFile[]>([]);
+
+  // Function to handle file selection and sharing
+  async function handleFileShare() {
+    try {
+      // Open file selector dialog
+      const filePath = await open({
+        multiple: false,
+        filters: [
+          { name: 'All Files', extensions: ['*'] }
+        ]
+      });
+
+      if (filePath && typeof filePath === 'string') {
+        await invoke('share_file', { filePath });
+        toast.success('File shared successfully');
+      }
+    } catch (error) {
+      console.error('Failed to share file:', error);
+      toast.error('Failed to share file');
+    }
+  }
+
+  // Function to download a shared file
+  async function handleFileDownload(ticket: string, fileName: string) {
+    try {
+      // Let user choose where to save the file
+      console.log("Downloading file:", fileName, "with ticket:", ticket);
+      await invoke('download_file', {
+        ticket: ticket,
+        fileName: fileName
+      });
+      toast.success('File downloaded successfully');
+
+    } catch (error) {
+      console.error('Failed to download file:', error);
+      toast.error('Failed to download file');
+    }
+  }
 
   // Function to handle user form submission
   async function handleUserFormSubmit(e: React.FormEvent) {
@@ -177,14 +224,37 @@ function App() {
           const newMember = parsedMessage.sender;
           const user = await fetchUserByNodeId(newMember);
           toast.info(`New Member Joined: ${user.firstName}`);
+        } else if (parsedMessage.type === "file") {
+          // Add new shared file to the list
+          const user = await fetchUserByNodeId(parsedMessage.sender);
+          setSharedFiles(prev => [...prev, {
+            fileName: parsedMessage.fileName,
+            sender: user.firstName || parsedMessage.sender,
+            blobTicket: parsedMessage.blobTicket,
+            timestamp: parsedMessage.ts
+          }]);
+          toast.info(`New file shared: ${parsedMessage.fileName}`);
         }
       } catch (error) {
         console.error("Failed to parse gossip message:", error);
       }
     });
 
+    const unlistenDownloadProgress = listen("download-progress", async (event) => {
+      const progress = event.payload as string;
+      try {
+        const parsedMessage = JSON.parse(progress);
+        console.log("Download progress received:", parsedMessage);
+        toast.info(`${parsedMessage.fileName}: ${parsedMessage.percentage}%`);
+      } catch (error) {
+        console.error("Failed to parse download progress:", error);
+      }
+
+    });
+
     return () => {
       unlistenGossipMessage.then((fn) => fn());
+      unlistenDownloadProgress.then((fn) => fn());
     };
   }, [userCache]); // Re-run effect if userCache changes
 
@@ -321,6 +391,44 @@ function App() {
           <button type="submit">Send</button>
         </form>
       </main>
+
+      <div className="file-sharing-section">
+        <h2>File Sharing</h2>
+        <button
+          className="share-file-btn"
+          onClick={handleFileShare}
+        >
+          Share a File
+        </button>
+
+        <div className="shared-files">
+          <h3>Shared Files</h3>
+          {sharedFiles.length === 0 ? (
+            <p className="no-files">No files have been shared yet</p>
+          ) : (
+            <ul className="files-list">
+              {sharedFiles.map((file, index) => (
+                <li key={index} className="file-item">
+                  <div className="file-info">
+                    <span className="file-name">{file.fileName}</span>
+                    <span className="file-sender">Shared by: {file.sender}</span>
+                    <span className="file-time">
+                      {new Date(file.timestamp * 1000).toLocaleString()}
+                    </span>
+                  </div>
+                  <button
+                    className="download-btn"
+                    onClick={() => handleFileDownload(file.blobTicket, file.fileName)}
+                  >
+                    Download
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+
 
       <ToastContainer autoClose={2000} />
     </div>

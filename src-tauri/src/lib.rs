@@ -23,6 +23,7 @@ pub(crate) struct AppState {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let builder = tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             commands::send_message,
@@ -32,7 +33,9 @@ pub fn run() {
             commands::user::get_user_by_node_id,
             commands::user::get_user_by_id,
             commands::user::create_user,
-            commands::node::get_node_by_id
+            commands::node::get_node_by_id,
+            commands::share_file,
+            commands::download_file
         ])
         .setup(|app| {
             async_runtime::block_on(async {

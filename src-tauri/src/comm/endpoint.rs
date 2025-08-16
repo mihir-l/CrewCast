@@ -1,8 +1,6 @@
 use futures_lite::StreamExt;
-use iroh::{
-    protocol::{Router, RouterBuilder},
-    Endpoint, SecretKey,
-};
+use iroh::{protocol::Router, Endpoint, SecretKey};
+use iroh_blobs::{store::mem::MemStore, BlobsProtocol};
 use iroh_gossip::{
     api::{Event, GossipReceiver, GossipSender},
     net::Gossip,
@@ -26,18 +24,27 @@ pub(crate) struct CommState {
     pub endpoint: Endpoint,
     pub gossip: Gossip,
     router: Router,
+    pub blobs: BlobsProtocol,
     pub topic_sender: Option<GossipSender>,
 }
 
 impl CommState {
     pub async fn init_from_endpoint(endpoint: Endpoint) -> Result<Self> {
         let gossip = new_gossip(endpoint.clone()).await?;
-        let router = new_router(endpoint.clone(), gossip.clone()).await?.spawn();
+
+        let store = MemStore::new();
+        let blobs = BlobsProtocol::new(&store, endpoint.clone(), None);
+        let router = Router::builder(endpoint.clone())
+            .accept(iroh_gossip::ALPN, gossip.clone())
+            .accept(iroh_blobs::ALPN, blobs.clone())
+            .spawn();
+
         Ok(Self {
             endpoint,
             gossip,
             router,
             topic_sender: None,
+            blobs,
         })
     }
 
@@ -72,11 +79,6 @@ pub async fn new_gossip(endpoint: Endpoint) -> Result<Gossip> {
     Ok(gossip)
 }
 
-pub async fn new_router(endpoint: Endpoint, gossip: Gossip) -> Result<RouterBuilder> {
-    let router = Router::builder(endpoint).accept(iroh_gossip::ALPN, gossip);
-    Ok(router)
-}
-
 pub fn create_secret() -> String {
     let secret_key = SecretKey::generate(rand::rngs::OsRng);
     data_encoding::BASE32_NOPAD.encode(&secret_key.to_bytes())
@@ -94,6 +96,8 @@ pub enum MessageType {
 
     // This type will be sent by any node that want to share a message by its user
     Chat(ChatMessage),
+
+    File(FileMessage),
 }
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
@@ -114,6 +118,14 @@ pub struct ChatMessage {
     pub content: String,
     pub sender: String,
     pub ts: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+pub struct FileMessage {
+    pub file_name: String,
+    pub sender: String,
+    pub ts: i64,
+    pub blob_ticket: String,
 }
 
 pub async fn subscribe(
@@ -173,6 +185,16 @@ pub async fn subscribe(
                         "type": "chat",
                         "sender": content.sender,
                         "content": content.content,
+                    })
+                    .to_string()
+                }
+                MessageType::File(file) => {
+                    // Handle file message
+                    serde_json::json!({
+                        "type": "file",
+                        "sender": file.sender,
+                        "fileName": file.file_name,
+                        "blobTicket": file.blob_ticket,
                     })
                     .to_string()
                 }
