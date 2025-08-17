@@ -1,8 +1,8 @@
-use std::{path::PathBuf, str::FromStr};
+use std::{fs, os::windows::fs::MetadataExt, path::PathBuf, str::FromStr};
 
 use anyhow::anyhow;
 use futures_lite::StreamExt;
-use iroh::Watcher;
+use iroh::{NodeId, Watcher};
 use iroh_blobs::{api::downloader::DownloadProgessItem, ticket::BlobTicket};
 use tauri::{AppHandle, Emitter, State};
 use tokio::sync::Mutex;
@@ -12,11 +12,15 @@ use crate::{
         endpoint::{subscribe, ChatMessage, FileMessage, MessageType},
         ticket::Ticket,
     },
-    database::topic::{Topic, TopicOperations},
+    database::{
+        file::{File, FileOperations, FileStatus},
+        topic::{Topic, TopicOperations},
+    },
     error::{Error, Result},
     AppState,
 };
 
+pub(crate) mod file;
 pub(crate) mod node;
 pub(crate) mod user;
 
@@ -41,10 +45,16 @@ pub async fn send_message(app_state: State<'_, Mutex<AppState>>, message: String
 #[tauri::command]
 pub async fn start_new_topic(
     app_state: State<'_, Mutex<AppState>>,
+    active_topic: State<'_, Mutex<Option<Topic>>>,
     app_handle: AppHandle,
     name: String,
 ) -> Result<String> {
     let mut state = app_state.lock().await;
+
+    let mut active_topic = active_topic.lock().await;
+    if active_topic.is_some() {
+        return Err(anyhow!("Already joined a topic").into());
+    }
 
     let gossip = state.comm.gossip.clone();
     let endpoint = state.comm.endpoint.clone();
@@ -75,6 +85,7 @@ pub async fn start_new_topic(
         .unwrap();
     });
     state.comm.topic_sender = Some(sender);
+    *active_topic = Some(topic.clone());
 
     Ok(format!(
         "{name}:{ticket}",
@@ -86,10 +97,16 @@ pub async fn start_new_topic(
 #[tauri::command]
 pub async fn join_topic_with_ticket(
     app_state: State<'_, Mutex<AppState>>,
+    active_topic: State<'_, Mutex<Option<Topic>>>,
     app_handle: AppHandle,
     key: String,
 ) -> Result<Topic> {
     let mut state = app_state.lock().await;
+
+    let mut active_topic = active_topic.lock().await;
+    if active_topic.is_some() {
+        return Err(anyhow!("Already joined a topic").into());
+    }
 
     if state.comm.topic_sender.is_some() {
         return Err(anyhow!("Already joined a topic").into());
@@ -150,6 +167,7 @@ pub async fn join_topic_with_ticket(
     });
 
     state.comm.topic_sender = Some(sender);
+    *active_topic = Some(topic.clone());
 
     Ok(topic)
 }
@@ -157,10 +175,16 @@ pub async fn join_topic_with_ticket(
 #[tauri::command]
 pub async fn join_topic_with_id(
     app_state: State<'_, Mutex<AppState>>,
+    active_topic: State<'_, Mutex<Option<Topic>>>,
     app_handle: AppHandle,
     id: i64,
 ) -> Result<Topic> {
     let mut state = app_state.lock().await;
+
+    let mut active_topic = active_topic.lock().await;
+    if active_topic.is_some() {
+        return Err(anyhow!("Already joined a topic").into());
+    }
 
     if state.comm.topic_sender.is_some() {
         return Err(anyhow!("Already joined a topic").into());
@@ -193,13 +217,23 @@ pub async fn join_topic_with_id(
         .unwrap();
     });
     state.comm.topic_sender = Some(sender);
+    *active_topic = Some(topic.clone());
 
     Ok(topic)
 }
 
 #[tauri::command]
-pub async fn share_file(app_state: State<'_, Mutex<AppState>>, file_path: String) -> Result<()> {
+pub async fn share_file(
+    app_state: State<'_, Mutex<AppState>>,
+    active_topic: State<'_, Mutex<Option<Topic>>>,
+    file_path: String,
+) -> Result<()> {
     let state = app_state.lock().await;
+    let active_topic = active_topic.lock().await;
+    if active_topic.is_none() {
+        return Err(anyhow!("Join a topic to share a file").into());
+    }
+    let db = &state.db;
     let topic_sender = state.comm.topic_sender.clone();
     let endpoint = state.comm.endpoint.clone();
     let node_id = endpoint.node_id().to_string();
@@ -216,22 +250,40 @@ pub async fn share_file(app_state: State<'_, Mutex<AppState>>, file_path: String
 
     let file_tag = blobs.store().add_path(file_path.clone()).await.unwrap();
 
+    let file_size = fs::metadata(file_path)?.file_size() as i64;
+
     let node_addr = endpoint.node_addr().get().unwrap();
     let ticket = BlobTicket::new(node_addr, file_tag.hash, file_tag.format);
 
+    let ts = chrono::Utc::now().timestamp();
     let message = MessageType::File(FileMessage {
-        file_name,
-        sender: node_id,
-        ts: chrono::Utc::now().timestamp(),
+        file_name: file_name.clone(),
+        sender: node_id.clone(),
+        ts,
         blob_ticket: ticket.to_string(),
+        size: file_size,
     });
 
-    if let Some(sender) = topic_sender {
-        sender
-            .broadcast(serde_json::to_vec(&message)?.into())
-            .await
-            .map_err(|e| Error::GossipSubscription(format!("Failed to send message: {}", e)))?;
+    db.create_file(File::new(
+        node_id,
+        active_topic.as_ref().unwrap().topic_id.clone(),
+        ticket.hash().to_string(),
+        file_name,
+        file_size,
+        file_tag.format.to_string(),
+        FileStatus::Shared,
+        ts,
+    ))
+    .await?;
+
+    if topic_sender.is_none() {
+        return Err(Error::Generic(anyhow!("Not joined to a topic")));
     }
+    topic_sender
+        .unwrap()
+        .broadcast(serde_json::to_vec(&message)?.into())
+        .await
+        .map_err(|e| Error::GossipSubscription(format!("Failed to send message: {}", e)))?;
 
     Ok(())
 }
@@ -240,24 +292,24 @@ pub async fn share_file(app_state: State<'_, Mutex<AppState>>, file_path: String
 pub async fn download_file(
     app_handle: AppHandle,
     app_state: State<'_, Mutex<AppState>>,
-    ticket: String,
-    file_name: String,
+    file: File,
 ) -> Result<()> {
     let state = app_state.lock().await;
     let blobs = state.comm.blobs.clone();
     let endpoint = state.comm.endpoint.clone();
 
-    let ticket = ticket
-        .parse::<BlobTicket>()
-        .map_err(|e| Error::Generic(anyhow!("Failed to parse blob ticket: {}", e)))?;
-
     let downloader = blobs.store().downloader(&endpoint);
 
-    let progress = downloader.download(ticket.hash(), Some(ticket.node_addr().node_id));
+    let file_owner_node_id = NodeId::from_str(&file.node_id)
+        .map_err(|e| Error::EncodeDecode(format!("Failed to parse nodeId: {}", e)))?;
+    let file_hash = iroh_blobs::Hash::from_str(&file.hash)
+        .map_err(|e| Error::EncodeDecode(format!("Failed to parse file hash: {}", e)))?;
+    let progress = downloader.download(file_hash, Some(file_owner_node_id));
     let mut stream = progress
         .stream()
         .await
         .map_err(|e| Error::Generic(anyhow!("Failed to create download stream: {}", e)))?;
+    let file_name = file.name.clone();
     while let Some(pg) = stream.next().await {
         let app_handle = app_handle.clone();
         let file_name = file_name.clone();
@@ -280,9 +332,14 @@ pub async fn download_file(
     blobs
         .store()
         .blobs()
-        .export(ticket.hash(), save_path)
+        .export(file_hash, save_path)
         .await
         .map_err(|e| Error::Generic(anyhow!("Failed to export blob: {}", e)))?;
+
+    let _ = &state
+        .db
+        .update_file(file.id, FileStatus::Downloaded)
+        .await?;
 
     Ok(())
 }

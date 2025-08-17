@@ -1,6 +1,7 @@
+use anyhow::anyhow;
 use futures_lite::StreamExt;
 use iroh::{protocol::Router, Endpoint, SecretKey};
-use iroh_blobs::{store::mem::MemStore, BlobsProtocol};
+use iroh_blobs::{store::mem::MemStore, ticket::BlobTicket, BlobsProtocol};
 use iroh_gossip::{
     api::{Event, GossipReceiver, GossipSender},
     net::Gossip,
@@ -12,6 +13,7 @@ use tokio::sync::Mutex;
 
 use crate::{
     database::{
+        file::{File, FileOperations, FileStatus},
         node::{Node, NodeOperations},
         topic::{Topic, TopicOperations},
         user::{User, UserOperations},
@@ -102,6 +104,8 @@ pub enum MessageType {
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct UserInfo {
+    #[serde(skip)]
+    pub id: i64,
     pub email: String,
     pub first_name: String,
     pub last_name: Option<String>,
@@ -126,6 +130,7 @@ pub struct FileMessage {
     pub sender: String,
     pub ts: i64,
     pub blob_ticket: String,
+    pub size: i64,
 }
 
 pub async fn subscribe(
@@ -135,6 +140,7 @@ pub async fn subscribe(
     node_id: String,
     topic_id: String,
 ) -> Result<()> {
+    let topic_id_copy = topic_id.clone();
     receiver
         .joined()
         .await
@@ -189,12 +195,31 @@ pub async fn subscribe(
                     .to_string()
                 }
                 MessageType::File(file) => {
+                    let state = app_handle.state::<Mutex<AppState>>();
+                    let db = &state.lock().await.db;
+                    let ticket = file
+                        .blob_ticket
+                        .clone()
+                        .parse::<BlobTicket>()
+                        .map_err(|e| {
+                            Error::Generic(anyhow!("Failed to parse blob ticket: {}", e))
+                        })?;
+                    let file = db
+                        .create_file(File::new(
+                            file.sender.clone(),
+                            topic_id_copy.clone(),
+                            ticket.hash().to_string(),
+                            file.file_name.clone(),
+                            file.size.clone(),
+                            ticket.format().to_string(),
+                            FileStatus::Shared,
+                            file.ts.clone(),
+                        ))
+                        .await?;
                     // Handle file message
                     serde_json::json!({
                         "type": "file",
-                        "sender": file.sender,
-                        "fileName": file.file_name,
-                        "blobTicket": file.blob_ticket,
+                        "file": file,
                     })
                     .to_string()
                 }

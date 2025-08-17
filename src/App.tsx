@@ -8,10 +8,16 @@ import "react-toastify/dist/ReactToastify.css"; // Import Toastify styles
 import "./App.css";
 
 interface SharedFile {
-  fileName: string;
+  id: number;
+  nodeId: String;
+  topicId: String;
+  hash: String;
+  name: string;
+  format: String;
+  size: number;
+  status: string;
+  sharedAt: number;
   sender: string;
-  blobTicket: string;
-  timestamp: number;
 }
 
 function App() {
@@ -56,14 +62,11 @@ function App() {
   }
 
   // Function to download a shared file
-  async function handleFileDownload(ticket: string, fileName: string) {
+  async function handleFileDownload(file: SharedFile) {
     try {
       // Let user choose where to save the file
-      console.log("Downloading file:", fileName, "with ticket:", ticket);
-      await invoke('download_file', {
-        ticket: ticket,
-        fileName: fileName
-      });
+      console.log("Downloading file:", file.name, "with ticket:", file.id);
+      await invoke('download_file', { file: file });
       toast.success('File downloaded successfully');
 
     } catch (error) {
@@ -226,14 +229,21 @@ function App() {
           toast.info(`New Member Joined: ${user.firstName}`);
         } else if (parsedMessage.type === "file") {
           // Add new shared file to the list
-          const user = await fetchUserByNodeId(parsedMessage.sender);
+          let fileInfo = parsedMessage.file;
+          const user = await fetchUserByNodeId(fileInfo.nodeId);
           setSharedFiles(prev => [...prev, {
-            fileName: parsedMessage.fileName,
-            sender: user.firstName || parsedMessage.sender,
-            blobTicket: parsedMessage.blobTicket,
-            timestamp: parsedMessage.ts
+            id: fileInfo.id,
+            nodeId: fileInfo.nodeId,
+            topicId: fileInfo.topicId,
+            hash: fileInfo.hash,
+            name: fileInfo.name,
+            format: fileInfo.format,
+            size: fileInfo.size,
+            status: fileInfo.status,
+            sharedAt: fileInfo.sharedAt,
+            sender: user.firstName || fileInfo.sender,
           }]);
-          toast.info(`New file shared: ${parsedMessage.fileName}`);
+          toast.info(`New file shared: ${fileInfo.name}`);
         }
       } catch (error) {
         console.error("Failed to parse gossip message:", error);
@@ -410,15 +420,15 @@ function App() {
               {sharedFiles.map((file, index) => (
                 <li key={index} className="file-item">
                   <div className="file-info">
-                    <span className="file-name">{file.fileName}</span>
+                    <span className="file-name">{file.name}</span>
                     <span className="file-sender">Shared by: {file.sender}</span>
                     <span className="file-time">
-                      {new Date(file.timestamp * 1000).toLocaleString()}
+                      {new Date(file.sharedAt * 1000).toLocaleString()}
                     </span>
                   </div>
                   <button
                     className="download-btn"
-                    onClick={() => handleFileDownload(file.blobTicket, file.fileName)}
+                    onClick={() => handleFileDownload(file)}
                   >
                     Download
                   </button>
