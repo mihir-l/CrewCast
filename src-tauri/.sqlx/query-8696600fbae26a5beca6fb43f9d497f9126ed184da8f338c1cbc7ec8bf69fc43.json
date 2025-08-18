@@ -1,0 +1,68 @@
+{
+  "db_name": "SQLite",
+  "query": "\n                INSERT INTO files (node_id, topic_id, hash, name, size, format, status, shared_at)\n                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)\n                RETURNING id, node_id, topic_id, hash, name, size, format, status, shared_at\n                ",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "node_id",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "topic_id",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "hash",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "name",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "size",
+        "ordinal": 5,
+        "type_info": "Integer"
+      },
+      {
+        "name": "format",
+        "ordinal": 6,
+        "type_info": "Text"
+      },
+      {
+        "name": "status",
+        "ordinal": 7,
+        "type_info": "Text"
+      },
+      {
+        "name": "shared_at",
+        "ordinal": 8,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 8
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "8696600fbae26a5beca6fb43f9d497f9126ed184da8f338c1cbc7ec8bf69fc43"
+}

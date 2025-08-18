@@ -64,6 +64,7 @@ pub async fn create_user(
 
     if node.id == 1 {
         *user_info.lock().await = UserInfo {
+            id: user.id,
             email: user.email.clone(),
             first_name: user.first_name.clone(),
             last_name: user.last_name.clone(),

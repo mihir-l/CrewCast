@@ -2,6 +2,7 @@ use crate::{
     comm::endpoint::{create_secret, CommState, UserInfo},
     database::{
         node::{Node, NodeOperations},
+        topic::Topic,
         user::UserOperations,
         Db,
     },
@@ -35,7 +36,8 @@ pub fn run() {
             commands::user::create_user,
             commands::node::get_node_by_id,
             commands::share_file,
-            commands::download_file
+            commands::download_file,
+            commands::file::list_files
         ])
         .setup(|app| {
             async_runtime::block_on(async {
@@ -67,6 +69,7 @@ pub fn run() {
                 match &app_state.db.get_user_by_id(1).await {
                     Ok(user) => {
                         app.manage(Mutex::new(UserInfo {
+                            id: user.id,
                             email: user.email.clone(),
                             first_name: user.first_name.clone(),
                             last_name: user.last_name.clone(),
@@ -77,6 +80,8 @@ pub fn run() {
                     }
                 }
                 app.manage(Mutex::new(app_state));
+                let active_topic: Option<Topic> = None;
+                app.manage(Mutex::new(active_topic));
             });
 
             Ok(())
