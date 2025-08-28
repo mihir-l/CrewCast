@@ -22,6 +22,7 @@ use crate::{
 
 pub(crate) mod file;
 pub(crate) mod node;
+pub(crate) mod topic;
 pub(crate) mod user;
 
 #[tauri::command]

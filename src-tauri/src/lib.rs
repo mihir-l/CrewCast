@@ -37,6 +37,8 @@ pub fn run() {
             commands::node::get_node_by_id,
             commands::share_file,
             commands::download_file,
+            commands::topic::list_topics,
+            commands::topic::get_topic_by_topic_id,
             commands::file::list_files
         ])
         .setup(|app| {
