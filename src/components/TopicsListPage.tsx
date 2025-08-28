@@ -4,7 +4,7 @@ import { Topic } from '../types/interfaces';
 import { toast } from 'react-toastify';
 
 const TopicsListPage: React.FC = () => {
-    const { fetchTopics, createTopic, joinTopicWithTicket, joinTopicWithId } = useTopic();
+    const { fetchTopics, createTopic, joinTopicWithTicket, joinTopicWithId, getTicketForTopic } = useTopic();
 
     const [topics, setTopics] = useState<Topic[]>([]);
     const [loading, setLoading] = useState(true);
@@ -62,7 +62,10 @@ const TopicsListPage: React.FC = () => {
 
     const copyToClipboard = () => {
         navigator.clipboard.writeText(generatedTicket);
-        toast.info('Ticket copied to clipboard');
+        toast.info('Ticket copied to clipboard', {
+            autoClose: 2000,
+            position: "bottom-right"
+        });
     };
 
     return (
@@ -87,35 +90,38 @@ const TopicsListPage: React.FC = () => {
                         </form>
 
                         {generatedTicket && (
-                            <div className="generated-ticket">
-                                <p>Share this ticket with others to invite them:</p>
-                                <div className="ticket-container">
-                                    <div className="ticket-field">
-                                        <input
-                                            type="text"
-                                            value={generatedTicket}
-                                            readOnly
-                                            className="ticket-input"
-                                            onClick={(e) => (e.target as HTMLInputElement).select()}
-                                        />
-                                    </div>
-                                    <div className="ticket-actions">
-                                        <button
-                                            onClick={copyToClipboard}
-                                            className="btn btn-secondary copy-btn"
-                                            title="Copy to clipboard"
-                                        >
-                                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
-                                                <path d="M4 1.5H3a2 2 0 0 0-2 2V14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V3.5a2 2 0 0 0-2-2h-1v1h1a1 1 0 0 1 1 1V14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1h1v-1z" />
-                                                <path d="M9.5 1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5h3zm-3-1A1.5 1.5 0 0 0 5 1.5v1A1.5 1.5 0 0 0 6.5 4h3A1.5 1.5 0 0 0 11 2.5v-1A1.5 1.5 0 0 0 9.5 0h-3z" />
-                                            </svg>
-                                            Copy
-                                        </button>
-                                    </div>
+                            <div className="topic-invite-ticket">
+                                <div className="ticket-header">
+                                    <h3>Topic Invitation Ticket</h3>
+                                    <button
+                                        className="close-ticket"
+                                        onClick={() => setGeneratedTicket('')}
+                                        aria-label="Close"
+                                    >
+                                        ✕
+                                    </button>
                                 </div>
-                                <p className="ticket-help">
-                                    <small>Click on the ticket to select it, or use the copy button</small>
-                                </p>
+                                <p>Share this ticket with others to invite them to join this topic:</p>
+                                <div className="ticket-display">
+                                    <div className="ticket-value" onClick={(e) => {
+                                        if (window.getSelection && document.createRange) {
+                                            const range = document.createRange();
+                                            range.selectNodeContents(e.currentTarget);
+                                            const selection = window.getSelection();
+                                            selection?.removeAllRanges();
+                                            selection?.addRange(range);
+                                        }
+                                    }}>
+                                        {generatedTicket}
+                                    </div>
+                                    <button
+                                        onClick={copyToClipboard}
+                                        className="btn btn-sm btn-primary copy-ticket"
+                                        title="Copy ticket to clipboard"
+                                    >
+                                        Copy
+                                    </button>
+                                </div>
                             </div>
                         )}
                     </div>
@@ -179,12 +185,33 @@ const TopicsListPage: React.FC = () => {
                                             <td>{topic.name}</td>
                                             <td>{topic.id}</td>
                                             <td>{topic.members ? topic.members.length : 0}</td>
-                                            <td>
+                                            <td className="topic-actions-cell">
                                                 <button
                                                     onClick={() => joinTopicWithId(topic.id)}
-                                                    className="btn btn-sm btn-secondary"
+                                                    className="btn btn-sm btn-primary"
+                                                    title="Join this topic"
                                                 >
                                                     Join
+                                                </button>
+                                                <button
+                                                    onClick={async () => {
+                                                        console.log(topic);
+                                                        const ticket = await getTicketForTopic(topic.topicId);
+                                                        if (ticket) {
+                                                            setGeneratedTicket(ticket);
+                                                            // Scroll to the ticket display
+                                                            setTimeout(() => {
+                                                                document.querySelector('.generated-ticket')?.scrollIntoView({
+                                                                    behavior: 'smooth',
+                                                                    block: 'center'
+                                                                });
+                                                            }, 100);
+                                                        }
+                                                    }}
+                                                    className="btn btn-sm btn-secondary"
+                                                    title="Get invitation ticket"
+                                                >
+                                                    Get Ticket
                                                 </button>
                                             </td>
                                         </tr>

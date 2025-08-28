@@ -8,7 +8,6 @@ export interface UserInfo {
 
 export interface Topic {
     id: number;
-    topic_id: string;
     topicId: string; // For frontend compatibility
     name: string;
     owner: string;

@@ -39,6 +39,8 @@ pub fn run() {
             commands::download_file,
             commands::topic::list_topics,
             commands::topic::get_topic_by_topic_id,
+            commands::topic::leave_topic,
+            commands::topic::get_ticket_for_topic,
             commands::file::list_files
         ])
         .setup(|app| {
