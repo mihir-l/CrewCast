@@ -1,0 +1,109 @@
+/* Topic Ticket Styles */
+.topic-actions-cell {
+    display: flex;
+    gap: var(--space-sm);
+    flex-wrap: wrap;
+}
+
+.topic-invite-ticket {
+    background-color: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: var(--space-md);
+    margin: var(--space-md) 0;
+    position: relative;
+    box-shadow: var(--shadow-sm);
+}
+
+.topic-invite-ticket .ticket-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--space-sm);
+}
+
+.topic-invite-ticket h3 {
+    margin: 0;
+    color: var(--primary);
+}
+
+.close-ticket {
+    border: none;
+    background: transparent;
+    color: var(--textSecondary);
+    cursor: pointer;
+    padding: var(--space-xs);
+    font-size: 1.2rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-full);
+}
+
+.close-ticket:hover {
+    background-color: var(--border);
+    color: var(--text);
+}
+
+.ticket-display {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    margin-top: var(--space-sm);
+}
+
+.ticket-value {
+    flex: 1;
+    background-color: var(--background);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: var(--space-sm) var(--space-md);
+    font-family: monospace;
+    overflow-wrap: break-word;
+    white-space: pre-wrap;
+    cursor: pointer;
+    user-select: all;
+    font-size: 0.9rem;
+    line-height: 1.4;
+    max-height: 100px;
+    overflow-y: auto;
+}
+
+.copy-ticket {
+    white-space: nowrap;
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+}
+
+/* Style improvements for topics list page */
+.topics-table .topic-actions-cell {
+    min-width: 180px;
+}
+
+.topics-table {
+    width: 100%;
+    overflow-x: auto;
+}
+
+.topics-table table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.topics-table th,
+.topics-table td {
+    padding: var(--space-sm) var(--space-md);
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+}
+
+.topics-table th {
+    background-color: var(--surface);
+    font-weight: 600;
+    color: var(--textSecondary);
+}
+
+.topics-table tr:hover {
+    background-color: var(--surface);
+}

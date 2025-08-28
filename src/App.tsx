@@ -1,6 +1,7 @@
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import './App.css';
+import './styles/ticket.css';
 import { UserProvider, useUser } from './contexts/UserContext';
 import { TopicProvider, useTopic } from './contexts/TopicContext';
 import { ThemeProvider } from './contexts/ThemeContext';

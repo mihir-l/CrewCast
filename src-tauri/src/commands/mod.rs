@@ -74,7 +74,7 @@ pub async fn start_new_topic(
     let sender_copy = sender.clone();
     let current_node_id_copy = current_node_id.clone();
     let topic_id_copy = topic.topic_id.clone();
-    tauri::async_runtime::spawn(async move {
+    let handle = tauri::async_runtime::spawn(async move {
         subscribe(
             receiver,
             sender_copy,
@@ -85,6 +85,8 @@ pub async fn start_new_topic(
         .await
         .unwrap();
     });
+
+    state.comm.topic_subscriber = Some(handle);
     state.comm.topic_sender = Some(sender);
     *active_topic = Some(topic.clone());
 
@@ -155,7 +157,7 @@ pub async fn join_topic_with_ticket(
     let sender_copy = sender.clone();
     let current_node_id_copy = current_node_id.clone();
     let topic_id_copy = topic.topic_id.clone();
-    tauri::async_runtime::spawn(async move {
+    let handle = tauri::async_runtime::spawn(async move {
         subscribe(
             receiver,
             sender_copy,
@@ -166,6 +168,8 @@ pub async fn join_topic_with_ticket(
         .await
         .unwrap();
     });
+
+    state.comm.topic_subscriber = Some(handle);
 
     state.comm.topic_sender = Some(sender);
     *active_topic = Some(topic.clone());
@@ -206,7 +210,7 @@ pub async fn join_topic_with_id(
     let sender_copy = sender.clone();
     let current_node_id = endpoint.node_id().to_string();
     let topic_id_copy = topic.topic_id.clone();
-    tauri::async_runtime::spawn(async move {
+    let handle = tauri::async_runtime::spawn(async move {
         subscribe(
             receiver,
             sender_copy,
@@ -217,6 +221,9 @@ pub async fn join_topic_with_id(
         .await
         .unwrap();
     });
+
+    state.comm.topic_subscriber = Some(handle);
+
     state.comm.topic_sender = Some(sender);
     *active_topic = Some(topic.clone());
 

@@ -11,6 +11,7 @@ interface TopicContextType {
     joinTopicWithTicket: (ticket: string) => Promise<boolean>;
     joinTopicWithId: (id: number) => Promise<boolean>;
     fetchTopics: () => Promise<Topic[]>;
+    getTicketForTopic: (topicId: string) => Promise<string>;
 }
 
 const TopicContext = createContext<TopicContextType | null>(null);
@@ -22,8 +23,15 @@ export const TopicProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         setCurrentTopic(topic);
     };
 
-    const leaveTopic = () => {
-        setCurrentTopic(null);
+    const leaveTopic = async (): Promise<void> => {
+        try {
+            const msg = await invoke<String>('leave_topic');
+            console.log(msg);
+            setCurrentTopic(null);
+        } catch (error) {
+            console.error('Failed to leave topic:', error);
+            toast.error('Failed to leave topic');
+        }
     };
 
     const createTopic = async (name: string): Promise<string> => {
@@ -75,12 +83,24 @@ export const TopicProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             const topics = await invoke<Topic[]>('list_topics');
             return topics.map(topic => ({
                 ...topic,
-                topicId: topic.topic_id // Ensure compatibility with frontend
             }));
         } catch (error) {
             console.error('Failed to fetch topics:', error);
             toast.error('Failed to fetch topics');
             return [];
+        }
+    };
+
+    const getTicketForTopic = async (topicId: string): Promise<string> => {
+        console.log(topicId);
+        try {
+            const ticket = await invoke<string>('get_ticket_for_topic', { topicId });
+            toast.success('Topic invitation ticket generated');
+            return ticket;
+        } catch (error) {
+            console.error('Failed to get ticket for topic:', error);
+            toast.error('Failed to generate invitation ticket');
+            return '';
         }
     };
 
@@ -94,6 +114,7 @@ export const TopicProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 joinTopicWithTicket,
                 joinTopicWithId,
                 fetchTopics,
+                getTicketForTopic,
             }}
         >
             {children}

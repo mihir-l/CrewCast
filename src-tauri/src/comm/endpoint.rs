@@ -8,7 +8,7 @@ use iroh_gossip::{
     proto::TopicId,
 };
 use serde::{Deserialize, Serialize};
-use tauri::{Emitter, Manager, State};
+use tauri::{async_runtime::JoinHandle, Emitter, Manager, State};
 use tokio::sync::Mutex;
 
 use crate::{
@@ -28,6 +28,7 @@ pub(crate) struct CommState {
     router: Router,
     pub blobs: BlobsProtocol,
     pub topic_sender: Option<GossipSender>,
+    pub topic_subscriber: Option<JoinHandle<()>>,
 }
 
 impl CommState {
@@ -47,6 +48,7 @@ impl CommState {
             router,
             topic_sender: None,
             blobs,
+            topic_subscriber: None,
         })
     }
 
