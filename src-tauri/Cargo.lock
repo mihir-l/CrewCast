@@ -891,6 +891,7 @@ dependencies = [
  "tauri-plugin-opener",
  "thiserror 2.0.14",
  "tokio",
+ "tokio-util",
 ]
 
 [[package]]
