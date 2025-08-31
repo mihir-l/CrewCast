@@ -3,8 +3,36 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 // Theme types
 export type ThemeType = 'light' | 'dark' | 'system';
 
-// Theme colors for each theme
+// Tailwind class-based theme configurations
 export const themes = {
+    light: {
+        bg: 'bg-gray-50',
+        card: 'bg-white',
+        cardHover: 'hover:bg-gray-100',
+        sidebar: 'bg-white',
+        text: 'text-gray-900',
+        textSecondary: 'text-gray-600',
+        textMuted: 'text-gray-500',
+        border: 'border-gray-200',
+        input: 'bg-white border-gray-300',
+        button: 'bg-blue-500 hover:bg-blue-600',
+    },
+    dark: {
+        bg: 'bg-gray-900',
+        card: 'bg-gray-800',
+        cardHover: 'hover:bg-gray-700',
+        sidebar: 'bg-gray-800',
+        text: 'text-white',
+        textSecondary: 'text-gray-300',
+        textMuted: 'text-gray-400',
+        border: 'border-gray-700',
+        input: 'bg-gray-700 border-gray-600',
+        button: 'bg-blue-600 hover:bg-blue-700',
+    },
+};
+
+// Also keep CSS variables for compatibility
+export const cssVariables = {
     light: {
         primary: '#2563eb', // Blue 600
         primaryDark: '#1d4ed8', // Blue 700
@@ -38,8 +66,10 @@ export const themes = {
 interface ThemeContextType {
     theme: ThemeType;
     currentTheme: typeof themes.light;
+    currentCssVariables: typeof cssVariables.light;
     setTheme: (theme: ThemeType) => void;
     toggleTheme: () => void;
+    isDark: boolean;
 }
 
 const ThemeContext = createContext<ThemeContextType | null>(null);
@@ -65,7 +95,22 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         return theme === 'dark' ? themes.dark : themes.light;
     };
 
+    const getActualCssVariables = () => {
+        if (theme === 'system') {
+            return getSystemTheme() === 'dark' ? cssVariables.dark : cssVariables.light;
+        }
+        return theme === 'dark' ? cssVariables.dark : cssVariables.light;
+    };
+
+    const isDark = () => {
+        if (theme === 'system') {
+            return getSystemTheme() === 'dark';
+        }
+        return theme === 'dark';
+    };
+
     const [currentTheme, setCurrentTheme] = useState(getActualTheme());
+    const [currentCssVariables, setCurrentCssVariables] = useState(getActualCssVariables());
 
     // Listen for system theme changes
     useEffect(() => {
@@ -74,6 +119,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         const handleChange = () => {
             if (theme === 'system') {
                 setCurrentTheme(getSystemTheme() === 'dark' ? themes.dark : themes.light);
+                setCurrentCssVariables(getSystemTheme() === 'dark' ? cssVariables.dark : cssVariables.light);
             }
         };
 
@@ -84,11 +130,12 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     // Update theme when it changes
     useEffect(() => {
         setCurrentTheme(getActualTheme());
+        setCurrentCssVariables(getActualCssVariables());
         localStorage.setItem('crewcast-theme', theme);
 
         // Update CSS variables
         const root = document.documentElement;
-        const themeColors = getActualTheme();
+        const themeColors = getActualCssVariables();
 
         Object.entries(themeColors).forEach(([key, value]) => {
             root.style.setProperty(`--${key}`, value);
@@ -109,7 +156,16 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     };
 
     return (
-        <ThemeContext.Provider value={{ theme, currentTheme, setTheme, toggleTheme }}>
+        <ThemeContext.Provider 
+            value={{ 
+                theme, 
+                currentTheme, 
+                currentCssVariables,
+                setTheme, 
+                toggleTheme,
+                isDark: isDark()
+            }}
+        >
             {children}
         </ThemeContext.Provider>
     );

@@ -3,17 +3,15 @@ import 'react-toastify/dist/ReactToastify.css';
 import './App.css';
 import './styles/ticket.css';
 import { UserProvider, useUser } from './contexts/UserContext';
-import { TopicProvider, useTopic } from './contexts/TopicContext';
+import { TopicProvider } from './contexts/TopicContext';
 import { ThemeProvider } from './contexts/ThemeContext';
 import UserRegistrationModal from './components/UserRegistrationModal';
-import TopicsListPage from './components/TopicsListPage';
-import TopicDetailsPage from './components/TopicDetailsPage';
+import CrewCastMainUI from './components/CrewCastMainUI';
 import AppLoading from './components/AppLoading';
 import WindowControls from './components/WindowControls';
 
 const AppContent = () => {
   const { isLoading, isRegistered } = useUser();
-  const { currentTopic } = useTopic();
 
   if (isLoading) {
     return <AppLoading />;
@@ -23,9 +21,7 @@ const AppContent = () => {
     <div className="app-container">
       {!isRegistered && <UserRegistrationModal />}
 
-      {isRegistered && !currentTopic && <TopicsListPage />}
-
-      {isRegistered && currentTopic && <TopicDetailsPage />}
+      {isRegistered && <CrewCastMainUI />}
 
       <ToastContainer
         position="bottom-right"
