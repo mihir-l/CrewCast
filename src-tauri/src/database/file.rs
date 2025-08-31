@@ -37,10 +37,6 @@ pub struct File {
 }
 
 impl File {
-    fn table_name() -> String {
-        String::from("files")
-    }
-
     pub(crate) fn new(
         node_id: String,
         topic_id: String,
@@ -69,12 +65,8 @@ impl File {
 
 pub trait FileOperations {
     async fn create_file(&self, file: File) -> Result<File>;
-    async fn get_file_by_id(&self, id: i64) -> Result<File>;
-    async fn get_file_by_hash(&self, hash: String) -> Result<File>;
     async fn list_files(&self, topic_id: String, node_id: Option<String>) -> Result<Vec<File>>;
     async fn update_file(&self, id: i64, status: FileStatus) -> Result<File>;
-    async fn delete_file_by_id(&self, id: i64) -> Result<()>;
-    async fn delete_files_by_node_id(&self, node_id: String) -> Result<()>;
 }
 
 impl FileOperations for Db {
@@ -95,36 +87,6 @@ impl FileOperations for Db {
             file.format,
             file.status,
             file.shared_at
-        )
-        .fetch_one(&self.0)
-        .await?;
-        Ok(file)
-    }
-
-    async fn get_file_by_id(&self, id: i64) -> Result<File> {
-        let file = sqlx::query_as!(
-            File,
-            r#"
-                SELECT id, node_id, topic_id, hash, name, absolute_path, size, format, status, shared_at
-                FROM files
-                WHERE id = $1
-                "#,
-            id
-        )
-        .fetch_one(&self.0)
-        .await?;
-        Ok(file)
-    }
-
-    async fn get_file_by_hash(&self, hash: String) -> Result<File> {
-        let file = sqlx::query_as!(
-            File,
-            r#"
-                SELECT id, node_id, topic_id, hash, name, absolute_path, size, format, status, shared_at
-                FROM files
-                WHERE hash = $1
-                "#,
-            hash
         )
         .fetch_one(&self.0)
         .await?;
@@ -163,31 +125,5 @@ impl FileOperations for Db {
         .fetch_one(&self.0)
         .await?;
         Ok(file)
-    }
-
-    async fn delete_file_by_id(&self, id: i64) -> Result<()> {
-        sqlx::query!(
-            r#"
-            DELETE FROM files
-            WHERE id = $1
-                "#,
-            id
-        )
-        .execute(&self.0)
-        .await?;
-        Ok(())
-    }
-
-    async fn delete_files_by_node_id(&self, node_id: String) -> Result<()> {
-        sqlx::query!(
-            r#"
-            DELETE FROM files
-            WHERE node_id = $1
-                "#,
-            node_id
-        )
-        .execute(&self.0)
-        .await?;
-        Ok(())
     }
 }
