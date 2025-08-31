@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "\n                UPDATE files\n                SET status = $1\n                WHERE id = $2\n                RETURNING id, node_id, topic_id, hash, name, size, format, status, shared_at\n                ",
+  "query": "\n                INSERT INTO files (node_id, topic_id, hash, name, absolute_path, size, format, status, shared_at)\n                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)\n                RETURNING id, node_id, topic_id, hash, name, absolute_path, size, format, status, shared_at\n                ",
   "describe": {
     "columns": [
       {
@@ -29,28 +29,33 @@
         "type_info": "Text"
       },
       {
-        "name": "size",
+        "name": "absolute_path",
         "ordinal": 5,
+        "type_info": "Text"
+      },
+      {
+        "name": "size",
+        "ordinal": 6,
         "type_info": "Integer"
       },
       {
         "name": "format",
-        "ordinal": 6,
-        "type_info": "Text"
-      },
-      {
-        "name": "status",
         "ordinal": 7,
         "type_info": "Text"
       },
       {
-        "name": "shared_at",
+        "name": "status",
         "ordinal": 8,
+        "type_info": "Text"
+      },
+      {
+        "name": "shared_at",
+        "ordinal": 9,
         "type_info": "Integer"
       }
     ],
     "parameters": {
-      "Right": 2
+      "Right": 9
     },
     "nullable": [
       false,
@@ -58,11 +63,12 @@
       false,
       false,
       false,
+      true,
       false,
       false,
       false,
       false
     ]
   },
-  "hash": "82512a9843f1fb843658f95308174f72e03f1d570899f5c711487a1cc5df7f2f"
+  "hash": "f339cdbc75f11159fbc7ce63f2e2fbb3e0bb676eb3d3ec6c008164b2bd66c6ce"
 }
