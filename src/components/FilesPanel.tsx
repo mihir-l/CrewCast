@@ -13,6 +13,7 @@ const FilesPanel: React.FC<FilesPanelProps> = ({ topicId }) => {
     const [files, setFiles] = useState<SharedFile[]>([]);
     const [loading, setLoading] = useState(true);
     const [downloading, setDownloading] = useState<Record<number, boolean>>({});
+    const [downloadProgress, setDownloadProgress] = useState<Record<number, number>>({});
 
     const loadFiles = async () => {
         setLoading(true);
@@ -71,26 +72,31 @@ const FilesPanel: React.FC<FilesPanelProps> = ({ topicId }) => {
         // Listen for download progress
         const unlistenDownloadProgress = listen('download-progress', async (event) => {
             const progress = event.payload as string;
-
             try {
                 const parsedMessage = JSON.parse(progress);
-                console.log('Download progress received:', parsedMessage);
-
-                // Update UI with progress
-                toast.info(`${parsedMessage.fileName}: ${parsedMessage.percentage}%`);
-
-                // If download is complete (100%), refresh the files list
-                if (parsedMessage.percentage === 100) {
-                    setTimeout(() => {
-                        loadFiles();
-                        setDownloading(prev => {
-                            const updated = { ...prev };
-                            // Find file by name and remove from downloading state
-                            const fileId = files.find(f => f.name === parsedMessage.fileName)?.id;
-                            if (fileId) delete updated[fileId];
-                            return updated;
-                        });
-                    }, 1000);
+                // Find file by name and update progress
+                const fileId = files.find(f => f.name === parsedMessage.fileName)?.id;
+                if (fileId && typeof parsedMessage.percentage === 'number') {
+                    setDownloadProgress(prev => ({
+                        ...prev,
+                        [fileId]: parsedMessage.percentage
+                    }));
+                    // Remove progress when complete
+                    if (parsedMessage.percentage === 100) {
+                        setTimeout(() => {
+                            setDownloadProgress(prev => {
+                                const updated = { ...prev };
+                                delete updated[fileId];
+                                return updated;
+                            });
+                            setDownloading(prev => {
+                                const updated = { ...prev };
+                                delete updated[fileId];
+                                return updated;
+                            });
+                            loadFiles();
+                        }, 1000);
+                    }
                 }
             } catch (error) {
                 console.error('Failed to parse download progress:', error);
@@ -187,7 +193,29 @@ const FilesPanel: React.FC<FilesPanelProps> = ({ topicId }) => {
                                     <td>{file.sender}</td>
                                     <td>{new Date(file.sharedAt * 1000).toLocaleString()}</td>
                                     <td className={`status-${file.status.toLowerCase()}`}>
-                                        {file.status}
+                                        {downloading[file.id] && downloadProgress[file.id] !== undefined ? (
+                                            <span>
+                                                Downloading... {downloadProgress[file.id].toFixed(1)}%
+                                                <div style={{
+                                                    width: '100px',
+                                                    height: '6px',
+                                                    background: '#eee',
+                                                    borderRadius: '3px',
+                                                    marginTop: '4px',
+                                                    position: 'relative'
+                                                }}>
+                                                    <div style={{
+                                                        width: `${downloadProgress[file.id]}%`,
+                                                        height: '100%',
+                                                        background: '#2196F3',
+                                                        borderRadius: '3px',
+                                                        transition: 'width 0.2s'
+                                                    }} />
+                                                </div>
+                                            </span>
+                                        ) : (
+                                            file.status
+                                        )}
                                     </td>
                                     <td>
                                         {file.status !== 'Downloaded' && !downloading[file.id] && (

@@ -28,19 +28,19 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             commands::send_message,
-            commands::topic::start_new_topic,
-            commands::topic::join_topic_with_ticket,
-            commands::topic::join_topic_with_id,
             commands::user::get_user_by_node_id,
             commands::user::get_user_by_id,
             commands::user::create_user,
             commands::node::get_node_by_id,
-            commands::topic::share_file,
-            commands::topic::download_file,
+            commands::topic::start_new_topic,
+            commands::topic::join_topic_with_ticket,
+            commands::topic::join_topic_with_id,
             commands::topic::list_topics,
             commands::topic::get_topic_by_topic_id,
             commands::topic::leave_topic,
             commands::topic::get_ticket_for_topic,
+            commands::file::share_file,
+            commands::file::download_file,
             commands::file::list_files
         ])
         .setup(|app| {
