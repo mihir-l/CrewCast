@@ -11,6 +11,7 @@ export const themes = {
         secondary: '#4f46e5', // Indigo 600
         background: '#ffffff',
         surface: '#f9fafb', // Gray 50
+        hover: '#f3f4f6', // Gray 100
         border: '#e5e7eb', // Gray 200
         text: '#1f2937', // Gray 800
         textSecondary: '#6b7280', // Gray 500
@@ -25,6 +26,7 @@ export const themes = {
         secondary: '#6366f1', // Indigo 500
         background: '#111827', // Gray 900
         surface: '#1f2937', // Gray 800
+        hover: '#374151', // Gray 700
         border: '#374151', // Gray 700
         text: '#f9fafb', // Gray 50
         textSecondary: '#d1d5db', // Gray 300
