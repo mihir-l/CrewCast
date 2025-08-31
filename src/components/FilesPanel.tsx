@@ -4,6 +4,7 @@ import { listen } from '@tauri-apps/api/event';
 import { open } from '@tauri-apps/plugin-dialog';
 import { toast } from 'react-toastify';
 import { SharedFile } from '../types/interfaces';
+import { useUser } from '../contexts/UserContext';
 
 interface FilesPanelProps {
     topicId: string;
@@ -14,6 +15,7 @@ const FilesPanel: React.FC<FilesPanelProps> = ({ topicId }) => {
     const [loading, setLoading] = useState(true);
     const [downloading, setDownloading] = useState<Record<number, boolean>>({});
     const [downloadProgress, setDownloadProgress] = useState<Record<number, number>>({});
+    const { currentUser } = useUser();
 
     const loadFiles = async () => {
         setLoading(true);
@@ -36,6 +38,8 @@ const FilesPanel: React.FC<FilesPanelProps> = ({ topicId }) => {
             );
 
             setFiles(enhancedFiles);
+            console.log('Loaded files:', enhancedFiles);
+            console.log('Current user nodeId:', currentUser?.nodeId);
         } catch (error) {
             console.error('Failed to load files for topic ID:', topicId, error);
             toast.error(`Could not load shared files: ${error instanceof Error ? error.message : String(error)}`);
@@ -157,86 +161,202 @@ const FilesPanel: React.FC<FilesPanelProps> = ({ topicId }) => {
     return (
         <div className="files-panel">
             <div className="files-header">
-                <h2>Shared Files</h2>
-                <button onClick={handleShareFile} className="btn btn-primary">
+                <h1 className="files-title">Shared Files</h1>
+                <button onClick={handleShareFile} className="share-file-btn">
                     Share a File
                 </button>
             </div>
 
             {loading ? (
-                <div className="loading">Loading files...</div>
+                <div className="files-empty">
+                    <div className="files-empty-icon">
+                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                    </div>
+                    <p className="files-empty-text">Loading files...</p>
+                </div>
             ) : files.length === 0 ? (
-                <div className="no-files">
-                    <p>No files have been shared in this topic yet</p>
-                    <button onClick={handleShareFile} className="btn btn-primary">
+                <div className="files-empty">
+                    <div className="files-empty-icon">
+                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                        </svg>
+                    </div>
+                    <p className="files-empty-text">No files have been shared in this topic yet</p>
+                    <button onClick={handleShareFile} className="share-file-btn">
                         Share the First File
                     </button>
                 </div>
             ) : (
-                <div className="files-table">
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>Name</th>
-                                <th>Size</th>
-                                <th>Shared By</th>
-                                <th>Date</th>
-                                <th>Status</th>
-                                <th>Action</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {files.map((file) => (
-                                <tr key={file.id} className="file-item">
-                                    <td>{file.name}</td>
-                                    <td>{formatFileSize(file.size)}</td>
-                                    <td>{file.sender}</td>
-                                    <td>{new Date(file.sharedAt * 1000).toLocaleString()}</td>
-                                    <td className={`status-${file.status.toLowerCase()}`}>
-                                        {downloading[file.id] && downloadProgress[file.id] !== undefined ? (
-                                            <span>
-                                                Downloading... {downloadProgress[file.id].toFixed(1)}%
+                <div className="files-list">
+                    {files.map((file) => (
+                        <div key={file.id} style={{
+                            background: 'var(--surface)',
+                            border: '1px solid var(--border)',
+                            borderRadius: '0.75rem',
+                            padding: '1rem',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '1rem',
+                            transition: 'all 0.2s ease',
+                            cursor: 'pointer'
+                        }}
+                            onMouseEnter={(e) => {
+                                e.currentTarget.style.background = 'var(--hover)';
+                            }}
+                            onMouseLeave={(e) => {
+                                e.currentTarget.style.background = 'var(--surface)';
+                            }}>
+                            {/* File Icon */}
+                            <div style={{
+                                width: '2.5rem',
+                                height: '2.5rem',
+                                background: 'var(--primary)',
+                                borderRadius: '0.5rem',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                flexShrink: 0
+                            }}>
+                                <svg style={{ width: '1.25rem', height: '1.25rem', color: 'white' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                </svg>
+                            </div>
+
+                            {/* File Info */}
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                                <h3 style={{
+                                    fontSize: '0.875rem',
+                                    fontWeight: '600',
+                                    color: 'var(--text)',
+                                    margin: '0 0 0.25rem 0',
+                                    overflow: 'hidden',
+                                    textOverflow: 'ellipsis',
+                                    whiteSpace: 'nowrap'
+                                }}>
+                                    {file.name}
+                                </h3>
+                                <div style={{
+                                    fontSize: '0.75rem',
+                                    color: 'var(--textSecondary)',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '0.5rem'
+                                }}>
+                                    <span>{formatFileSize(file.size)}</span>
+                                    <span>•</span>
+                                    <span>{file.sender || 'Unknown'}</span>
+                                    <span>•</span>
+                                    <span>{new Date(file.sharedAt * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                                </div>
+                            </div>
+
+                            {/* Status and Progress */}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexShrink: 0 }}>
+                                {downloading[file.id] && downloadProgress[file.id] !== undefined ? (
+                                    <>
+                                        <div style={{
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '0.5rem',
+                                            minWidth: '4rem'
+                                        }}>
+                                            <div style={{
+                                                width: '3rem',
+                                                height: '0.25rem',
+                                                background: 'var(--border)',
+                                                borderRadius: '0.125rem',
+                                                overflow: 'hidden'
+                                            }}>
                                                 <div style={{
-                                                    width: '100px',
-                                                    height: '6px',
-                                                    background: '#eee',
-                                                    borderRadius: '3px',
-                                                    marginTop: '4px',
-                                                    position: 'relative'
-                                                }}>
-                                                    <div style={{
-                                                        width: `${downloadProgress[file.id]}%`,
-                                                        height: '100%',
-                                                        background: '#2196F3',
-                                                        borderRadius: '3px',
-                                                        transition: 'width 0.2s'
-                                                    }} />
-                                                </div>
+                                                    width: `${downloadProgress[file.id]}%`,
+                                                    height: '100%',
+                                                    background: 'var(--primary)',
+                                                    transition: 'width 0.2s ease'
+                                                }} />
+                                            </div>
+                                            <span style={{
+                                                fontSize: '0.75rem',
+                                                color: 'var(--textSecondary)',
+                                                fontWeight: '600'
+                                            }}>
+                                                {downloadProgress[file.id].toFixed(0)}%
                                             </span>
-                                        ) : (
-                                            file.status
-                                        )}
-                                    </td>
-                                    <td>
-                                        {file.status !== 'Downloaded' && !downloading[file.id] && (
-                                            <button
-                                                onClick={() => handleDownloadFile(file)}
-                                                className="btn btn-sm btn-secondary"
-                                            >
-                                                Download
-                                            </button>
-                                        )}
-                                        {downloading[file.id] && (
-                                            <span className="downloading">Downloading...</span>
-                                        )}
-                                        {file.status === 'Downloaded' && (
-                                            <span className="downloaded">✓ Downloaded</span>
-                                        )}
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
+                                        </div>
+                                    </>
+                                ) : file.status === 'Downloaded' ? (
+                                    <div style={{
+                                        width: '1.5rem',
+                                        height: '1.5rem',
+                                        background: 'var(--success)',
+                                        borderRadius: '50%',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center'
+                                    }}>
+                                        <svg style={{ width: '0.875rem', height: '0.875rem', color: 'white' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                        </svg>
+                                    </div>
+                                ) : file.nodeId === currentUser?.nodeId ? (
+                                    <div style={{
+                                        width: '1.5rem',
+                                        height: '1.5rem',
+                                        background: 'var(--warning)',
+                                        borderRadius: '50%',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center'
+                                    }}>
+                                        <svg style={{ width: '0.875rem', height: '0.875rem', color: 'white' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                        </svg>
+                                    </div>
+                                ) : (
+                                    <div style={{
+                                        width: '1.5rem',
+                                        height: '1.5rem',
+                                        background: 'var(--primary)',
+                                        borderRadius: '50%',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center'
+                                    }}>
+                                        <svg style={{ width: '0.875rem', height: '0.875rem', color: 'white' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                        </svg>
+                                    </div>
+                                )}
+
+                                {/* Download Button */}
+                                {file.nodeId !== currentUser?.nodeId &&
+                                    file.status !== 'Downloaded' &&
+                                    !downloading[file.id] && (
+                                        <button
+                                            onClick={() => handleDownloadFile(file)}
+                                            style={{
+                                                background: 'var(--primary)',
+                                                border: 'none',
+                                                color: 'white',
+                                                cursor: 'pointer',
+                                                padding: '0.5rem',
+                                                borderRadius: '0.375rem',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                transition: 'opacity 0.2s ease'
+                                            }}
+                                            title="Download file"
+                                        >
+                                            <svg style={{ width: '1rem', height: '1rem' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                            </svg>
+                                        </button>
+                                    )}
+                            </div>
+                        </div>
+                    ))}
                 </div>
             )}
         </div>

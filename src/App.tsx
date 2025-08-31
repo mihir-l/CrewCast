@@ -53,7 +53,9 @@ function App() {
               <div className="app-title">CrewCast</div>
               <WindowControls />
             </div>
-            <AppContent />
+            <div className="app-container">
+              <AppContent />
+            </div>
           </div>
         </TopicProvider>
       </UserProvider>
