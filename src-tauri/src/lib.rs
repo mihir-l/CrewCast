@@ -1,8 +1,5 @@
 use crate::{
-    comm::{
-        endpoint::{create_secret, CommState},
-        model::UserInfo,
-    },
+    comm::{endpoint::create_secret, model::UserInfo, state::CommState},
     database::{
         node::{Node, NodeOperations},
         topic::Topic,

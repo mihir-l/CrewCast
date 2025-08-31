@@ -1,9 +1,7 @@
-use iroh::{protocol::Router, Endpoint, SecretKey};
-use iroh_blobs::{store::mem::MemStore, BlobsProtocol};
-use iroh_gossip::{api::GossipSender, net::Gossip, proto::TopicId};
-use tauri::{async_runtime::JoinHandle, State};
+use iroh::{Endpoint, SecretKey};
+use iroh_gossip::{net::Gossip, proto::TopicId};
+use tauri::State;
 use tokio::sync::Mutex;
-use tokio_util::sync::CancellationToken;
 
 use crate::{
     comm::model::UserInfo,
@@ -15,45 +13,6 @@ use crate::{
     error::{Error, Result},
     AppState,
 };
-
-pub(crate) struct CommState {
-    pub endpoint: Endpoint,
-    pub gossip: Gossip,
-    router: Router,
-    pub blobs: BlobsProtocol,
-    pub topic_sender: Option<GossipSender>,
-    pub topic_subscriber: Option<JoinHandle<()>>,
-    pub topic_cancel_token: Option<CancellationToken>,
-}
-
-impl CommState {
-    pub async fn init_from_endpoint(endpoint: Endpoint) -> Result<Self> {
-        let gossip = new_gossip(endpoint.clone()).await?;
-
-        let store = MemStore::new();
-        let blobs = BlobsProtocol::new(&store, endpoint.clone(), None);
-        let router = Router::builder(endpoint.clone())
-            .accept(iroh_gossip::ALPN, gossip.clone())
-            .accept(iroh_blobs::ALPN, blobs.clone())
-            .spawn();
-
-        Ok(Self {
-            endpoint,
-            gossip,
-            router,
-            topic_sender: None,
-            blobs,
-            topic_subscriber: None,
-            topic_cancel_token: None,
-        })
-    }
-
-    pub async fn close(&mut self) {
-        self.gossip.shutdown().await.ok();
-        self.endpoint.close().await;
-        self.router.shutdown().await.ok();
-    }
-}
 
 pub async fn create_endpoint(encoded_secret: String) -> Result<Endpoint> {
     let mut key_bytes = [0u8; 32];

@@ -5,6 +5,7 @@ CREATE TABLE IF NOT EXISTS files (
     topic_id TEXT NOT NULL, -- Topic in which the file is shared
     hash TEXT NOT NULL,
     name TEXT NOT NULL,
+    absolute_path TEXT,
     format TEXT NOT NULL,
     size INTEGER NOT NULL,
     status TEXT NOT NULL, -- Status of the file (e.g., "SHARED", "DOWNLOADED")

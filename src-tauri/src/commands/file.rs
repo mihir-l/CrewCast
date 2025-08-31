@@ -13,5 +13,5 @@ pub async fn list_files(
     topic_id: String,
 ) -> Result<Vec<File>> {
     let state = app_state.lock().await;
-    state.db.list_files(topic_id).await
+    state.db.list_files(topic_id, None).await
 }

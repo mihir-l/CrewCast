@@ -1,5 +1,10 @@
 use anyhow::anyhow;
-use std::{fs, os::windows::fs::MetadataExt, path::PathBuf, str::FromStr};
+use std::{
+    fs,
+    os::windows::fs::MetadataExt,
+    path::{Path, PathBuf},
+    str::FromStr,
+};
 use tauri::{AppHandle, Emitter, State};
 use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
@@ -193,7 +198,25 @@ pub async fn join_topic_with_id(
 
     let topic = state.db.get_topic_by_id(id).await?;
     let endpoint = state.comm.endpoint.clone();
+    let node_id = endpoint.node_id().to_string();
     let gossip = state.comm.gossip.clone();
+
+    let blobs = state.comm.blobs.clone();
+
+    let shared_files = state
+        .db
+        .list_files(topic.topic_id.clone(), Some(node_id))
+        .await?;
+    for file in shared_files.iter() {
+        let file_path = file
+            .absolute_path
+            .as_ref()
+            .expect("Files shared by owner must have the path saved");
+        let path = Path::new(file_path);
+        if path.exists() {
+            blobs.store().add_path(path).await.unwrap();
+        }
+    }
 
     let ticket = Ticket::new(&topic.topic_id, topic.get_peers())?;
 
@@ -209,7 +232,8 @@ pub async fn join_topic_with_id(
     let cancellation_token = CancellationToken::new();
     state.comm.topic_cancel_token = Some(cancellation_token.clone());
     let handle = tauri::async_runtime::spawn(async move {
-        subscribe(
+        let app_handle_copy = app_handle.clone();
+        if let Err(e) = subscribe(
             receiver,
             sender_copy,
             app_handle,
@@ -218,7 +242,11 @@ pub async fn join_topic_with_id(
             cancellation_token,
         )
         .await
-        .unwrap();
+        {
+            app_handle_copy
+                .emit("topic-subscription-error", e.to_string())
+                .ok();
+        }
     });
 
     state.comm.topic_subscriber = Some(handle);
@@ -258,7 +286,7 @@ pub async fn share_file(
 
     let file_tag = blobs.store().add_path(file_path.clone()).await.unwrap();
 
-    let file_size = fs::metadata(file_path)?.file_size() as i64;
+    let file_size = fs::metadata(&file_path)?.file_size() as i64;
 
     let node_addr = endpoint.node_addr().get().unwrap();
     let ticket = BlobTicket::new(node_addr, file_tag.hash, file_tag.format);
@@ -276,6 +304,7 @@ pub async fn share_file(
         active_topic.as_ref().unwrap().topic_id.clone(),
         ticket.hash().to_string(),
         file_name,
+        Some(file_path.to_string_lossy().to_string()),
         file_size,
         file_tag.format.to_string(),
         FileStatus::Shared,

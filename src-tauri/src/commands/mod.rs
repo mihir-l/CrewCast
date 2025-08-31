@@ -2,7 +2,7 @@ use tauri::State;
 use tokio::sync::Mutex;
 
 use crate::{
-    comm::model::{self, Chat, UserInfo},
+    comm::model::{self, Chat, MessageType, UserInfo},
     error::{Error, Result},
     AppState,
 };
@@ -25,7 +25,7 @@ pub async fn send_message(
         state.comm.endpoint.node_id().to_string(),
         None,
     );
-    let message = model::Message::new(Chat::new(message), metadata);
+    let message = MessageType::Chat(model::Message::new(Chat::new(message), metadata));
     let message = serde_json::to_vec(&message)?;
     if let Some(sender) = topic_sender {
         sender

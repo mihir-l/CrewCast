@@ -18,6 +18,7 @@ use crate::{
 
 pub mod endpoint;
 pub mod model;
+pub mod state;
 pub mod ticket;
 
 pub async fn subscribe(
@@ -149,6 +150,7 @@ async fn subscription_handler(
                             topic_id.clone(),
                             ticket.hash().to_string(),
                             file.file_name.clone(),
+                            None,
                             file.size.clone(),
                             ticket.format().to_string(),
                             FileStatus::Shared,
@@ -179,9 +181,10 @@ async fn check_in_task(
     let mut check_in = model::Message::new(CheckIn::new(topic_id), metadata);
     loop {
         check_in.metadata.ts = chrono::Utc::now().timestamp();
+        let check_in = MessageType::CheckIn(check_in.clone());
         if let Some(message) = serde_json::to_vec(&check_in).ok() {
             sender.broadcast(message.into()).await.ok();
         }
-        tokio::time::sleep(std::time::Duration::from_secs(30)).await;
+        tokio::time::sleep(std::time::Duration::from_secs(10)).await;
     }
 }
