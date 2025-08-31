@@ -38,6 +38,16 @@
   --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
   --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
 
+  /* Topic colors */
+  --topic-blue: #3b82f6;
+  --topic-purple: #8b5cf6;
+  --topic-green: #10b981;
+  --topic-yellow: #f59e0b;
+  --topic-red: #ef4444;
+  --topic-indigo: #6366f1;
+  --topic-pink: #ec4899;
+  --topic-teal: #14b8a6;
+
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
   font-size: 16px;
   -webkit-font-smoothing: antialiased;
@@ -472,36 +482,37 @@ body {
 }
 
 /* Color classes for topic indicators */
+
 .bg-blue-500 {
-  background-color: #3b82f6;
+  background-color: var(--topic-blue);
 }
 
 .bg-purple-500 {
-  background-color: #8b5cf6;
+  background-color: var(--topic-purple);
 }
 
 .bg-green-500 {
-  background-color: #10b981;
+  background-color: var(--topic-green);
 }
 
 .bg-yellow-500 {
-  background-color: #f59e0b;
+  background-color: var(--topic-yellow);
 }
 
 .bg-red-500 {
-  background-color: #ef4444;
+  background-color: var(--topic-red);
 }
 
 .bg-indigo-500 {
-  background-color: #6366f1;
+  background-color: var(--topic-indigo);
 }
 
 .bg-pink-500 {
-  background-color: #ec4899;
+  background-color: var(--topic-pink);
 }
 
 .bg-teal-500 {
-  background-color: #14b8a6;
+  background-color: var(--topic-teal);
 }
 
 /* Files Panel Styles */
@@ -1021,4 +1032,20 @@ body {
   color: #666;
   margin: 0.5rem 0 0;
   font-size: 0.85rem;
+}
+
+/* Topic card styles for sidebar */
+.topic-card {
+  transition: background 0.2s, border 0.2s;
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+
+.topic-card:hover {
+  background: var(--hover);
+}
+
+.topic-card--active {
+  background: rgba(37, 99, 235, 0.1);
+  border: 2px solid var(--primary);
 }

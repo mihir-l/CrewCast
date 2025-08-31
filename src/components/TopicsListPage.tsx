@@ -175,6 +175,7 @@ const TopicsListPage: React.FC = () => {
                             <div
                                 key={topic.id}
                                 onClick={() => handleTopicSelect(topic)}
+                                className={`topic-card${currentTopic?.id === topic.id ? ' topic-card--active' : ''}`}
                                 style={{
                                     padding: '12px 16px',
                                     borderRadius: '8px',
@@ -185,16 +186,6 @@ const TopicsListPage: React.FC = () => {
                                     display: 'flex',
                                     alignItems: 'center',
                                     gap: '12px'
-                                }}
-                                onMouseEnter={(e) => {
-                                    if (currentTopic?.id !== topic.id) {
-                                        (e.target as HTMLElement).style.backgroundColor = 'var(--border)';
-                                    }
-                                }}
-                                onMouseLeave={(e) => {
-                                    if (currentTopic?.id !== topic.id) {
-                                        (e.target as HTMLElement).style.backgroundColor = 'var(--surface)';
-                                    }
                                 }}
                             >
                                 <div
