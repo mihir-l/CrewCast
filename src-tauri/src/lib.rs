@@ -1,5 +1,5 @@
 use crate::{
-    comm::endpoint::{create_secret, CommState, UserInfo},
+    comm::{endpoint::create_secret, model::UserInfo, state::CommState},
     database::{
         node::{Node, NodeOperations},
         topic::Topic,
@@ -28,30 +28,29 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             commands::send_message,
-            commands::start_new_topic,
-            commands::join_topic_with_ticket,
-            commands::join_topic_with_id,
             commands::user::get_user_by_node_id,
             commands::user::get_user_by_id,
             commands::user::create_user,
             commands::node::get_node_by_id,
-            commands::share_file,
-            commands::download_file,
+            commands::topic::start_new_topic,
+            commands::topic::join_topic_with_ticket,
+            commands::topic::join_topic_with_id,
             commands::topic::list_topics,
             commands::topic::get_topic_by_topic_id,
             commands::topic::leave_topic,
             commands::topic::get_ticket_for_topic,
+            commands::file::share_file,
+            commands::file::download_file,
             commands::file::list_files
         ])
         .setup(|app| {
             async_runtime::block_on(async {
                 let password =
                     std::env::var("DATABASE_PASSWORD").unwrap_or_else(|_| "password".into());
-                // let data_dir = app
-                //     .path()
-                //     .app_data_dir()
-                //     .expect("failed to get app data dir");
-                let data_dir = std::env::current_dir().unwrap();
+                let data_dir = app
+                    .path()
+                    .app_data_dir()
+                    .expect("failed to get app data dir");
                 if !data_dir.exists() {
                     std::fs::create_dir_all(&data_dir).expect("failed to create data directory");
                 }

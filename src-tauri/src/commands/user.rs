@@ -4,7 +4,7 @@ use tokio::sync::Mutex;
 use tauri::State;
 
 use crate::{
-    comm::endpoint::UserInfo,
+    comm::model::UserInfo,
     database::{
         node::NodeOperations,
         user::{User, UserOperations},

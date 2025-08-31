@@ -16,10 +16,6 @@ pub struct Topic {
 }
 
 impl Topic {
-    fn table_name() -> String {
-        String::from("topics")
-    }
-
     pub(crate) fn new_topic(name: String, owner: String, members: Option<Vec<String>>) -> Self {
         Self {
             id: 0, // This will be set by the database
@@ -56,97 +52,100 @@ impl Topic {
 }
 
 pub trait TopicOperations {
-    fn create_topic(&self, topic: Topic)
-        -> impl std::future::Future<Output = Result<Topic>> + Send;
-    fn get_topic_by_id(&self, id: i64) -> impl std::future::Future<Output = Result<Topic>> + Send;
-    fn get_topic_by_topic_id(
-        &self,
-        topic_id: String,
-    ) -> impl std::future::Future<Output = Result<Topic>> + Send;
-    fn list_topics(&self) -> impl std::future::Future<Output = Result<Vec<Topic>>> + Send;
-    fn delete_topic_by_id(&self, id: i64) -> impl std::future::Future<Output = Result<()>> + Send;
-    fn update_topic(
-        &self,
-        id: i64,
-        members: Vec<String>,
-    ) -> impl std::future::Future<Output = Result<Topic>> + Send;
+    async fn create_topic(&self, topic: Topic) -> Result<Topic>;
+    async fn get_topic_by_id(&self, id: i64) -> Result<Topic>;
+    async fn get_topic_by_topic_id(&self, topic_id: String) -> Result<Topic>;
+    async fn list_topics(&self) -> Result<Vec<Topic>>;
+    async fn update_topic(&self, id: i64, members: Vec<String>) -> Result<Topic>;
 }
 
 impl TopicOperations for Db {
-    fn create_topic(
-        &self,
-        topic: Topic,
-    ) -> impl std::future::Future<Output = Result<Topic>> + Send {
-        async move {
-            let members = topic.members.map(|members| members.join(","));
-            let record = sqlx::query!(
-                r#"
+    async fn create_topic(&self, topic: Topic) -> Result<Topic> {
+        let members = topic.members.map(|members| members.join(","));
+        let record = sqlx::query!(
+            r#"
                 INSERT INTO topics (topic_id, owner, members, name)
                 VALUES ($1, $2, $3, $4)
                 RETURNING id, topic_id, owner, members, name
                 "#,
-                topic.topic_id,
-                topic.owner,
-                members,
-                topic.name,
-            )
-            .fetch_one(&self.0)
-            .await?;
-            let topic = Topic {
-                id: record.id,
-                topic_id: record.topic_id,
-                name: record.name,
-                owner: record.owner,
-                members: record
-                    .members
-                    .map(|members| members.split(',').map(String::from).collect()),
-            };
-            Ok(topic)
-        }
+            topic.topic_id,
+            topic.owner,
+            members,
+            topic.name,
+        )
+        .fetch_one(&self.0)
+        .await?;
+        let topic = Topic {
+            id: record.id,
+            topic_id: record.topic_id,
+            name: record.name,
+            owner: record.owner,
+            members: record
+                .members
+                .map(|members| members.split(',').map(String::from).collect()),
+        };
+        Ok(topic)
     }
 
-    fn get_topic_by_id(&self, id: i64) -> impl std::future::Future<Output = Result<Topic>> + Send {
-        async move {
-            let record = sqlx::query!(
-                r#"
+    async fn get_topic_by_id(&self, id: i64) -> Result<Topic> {
+        let record = sqlx::query!(
+            r#"
                 SELECT id, topic_id, owner, members, name
                 FROM topics
                 WHERE id = $1
                 "#,
-                id
-            )
-            .fetch_one(&self.0)
-            .await?;
-            let topic = Topic {
-                id: record.id,
-                topic_id: record.topic_id,
-                name: record.name,
-                owner: record.owner,
-                members: record
-                    .members
-                    .map(|members| members.split(',').map(String::from).collect()),
-            };
-            Ok(topic)
-        }
+            id
+        )
+        .fetch_one(&self.0)
+        .await?;
+        let topic = Topic {
+            id: record.id,
+            topic_id: record.topic_id,
+            name: record.name,
+            owner: record.owner,
+            members: record
+                .members
+                .map(|members| members.split(',').map(String::from).collect()),
+        };
+        Ok(topic)
     }
 
-    fn get_topic_by_topic_id(
-        &self,
-        topic_id: String,
-    ) -> impl std::future::Future<Output = Result<Topic>> + Send {
-        async move {
-            let record = sqlx::query!(
-                r#"
+    async fn get_topic_by_topic_id(&self, topic_id: String) -> Result<Topic> {
+        let record = sqlx::query!(
+            r#"
                 SELECT id, topic_id, owner, members, name
                 FROM topics
                 WHERE topic_id = $1
                 "#,
-                topic_id
-            )
-            .fetch_one(&self.0)
-            .await?;
+            topic_id
+        )
+        .fetch_one(&self.0)
+        .await?;
 
-            let topic = Topic {
+        let topic = Topic {
+            id: record.id,
+            topic_id: record.topic_id,
+            name: record.name,
+            owner: record.owner,
+            members: record
+                .members
+                .map(|members| members.split(',').map(String::from).collect()),
+        };
+        Ok(topic)
+    }
+
+    async fn list_topics(&self) -> Result<Vec<Topic>> {
+        let records = sqlx::query!(
+            r#"
+                SELECT id, topic_id, owner, members, name
+                FROM topics
+                "#
+        )
+        .fetch_all(&self.0)
+        .await?;
+        let topics = records
+            .into_iter()
+            .map(|record| Topic {
                 id: record.id,
                 topic_id: record.topic_id,
                 name: record.name,
@@ -154,82 +153,35 @@ impl TopicOperations for Db {
                 members: record
                     .members
                     .map(|members| members.split(',').map(String::from).collect()),
-            };
-            Ok(topic)
-        }
+            })
+            .collect();
+        Ok(topics)
     }
 
-    fn list_topics(&self) -> impl std::future::Future<Output = Result<Vec<Topic>>> + Send {
-        async move {
-            let records = sqlx::query!(
-                r#"
-                SELECT id, topic_id, owner, members, name
-                FROM topics
-                "#
-            )
-            .fetch_all(&self.0)
-            .await?;
-            let topics = records
-                .into_iter()
-                .map(|record| Topic {
-                    id: record.id,
-                    topic_id: record.topic_id,
-                    name: record.name,
-                    owner: record.owner,
-                    members: record
-                        .members
-                        .map(|members| members.split(',').map(String::from).collect()),
-                })
-                .collect();
-            Ok(topics)
-        }
-    }
-
-    fn delete_topic_by_id(&self, id: i64) -> impl std::future::Future<Output = Result<()>> + Send {
-        async move {
-            sqlx::query!(
-                r#"
-                DELETE FROM topics
-                WHERE id = $1
-                "#,
-                id
-            )
-            .execute(&self.0)
-            .await?;
-            Ok(())
-        }
-    }
-
-    fn update_topic(
-        &self,
-        id: i64,
-        members: Vec<String>,
-    ) -> impl std::future::Future<Output = Result<Topic>> + Send {
-        async move {
-            let members = members.join(",");
-            let record = sqlx::query!(
-                r#"
+    async fn update_topic(&self, id: i64, members: Vec<String>) -> Result<Topic> {
+        let members = members.join(",");
+        let record = sqlx::query!(
+            r#"
                 UPDATE topics
                 SET members = $1
                 WHERE id = $2
                 RETURNING id, topic_id, owner, members, name
                 "#,
-                members,
-                id
-            )
-            .fetch_one(&self.0)
-            .await?;
+            members,
+            id
+        )
+        .fetch_one(&self.0)
+        .await?;
 
-            let topic = Topic {
-                id: record.id,
-                topic_id: record.topic_id,
-                owner: record.owner,
-                members: record
-                    .members
-                    .map(|members| members.split(',').map(String::from).collect()),
-                name: record.name,
-            };
-            Ok(topic)
-        }
+        let topic = Topic {
+            id: record.id,
+            topic_id: record.topic_id,
+            owner: record.owner,
+            members: record
+                .members
+                .map(|members| members.split(',').map(String::from).collect()),
+            name: record.name,
+        };
+        Ok(topic)
     }
 }
