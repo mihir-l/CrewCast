@@ -210,26 +210,3 @@ pub async fn download_file(
 
     Ok(())
 }
-
-pub(crate) async fn load_files_for_topic(
-    state: &mut AppState,
-    topic: &Topic,
-    node_id: &str,
-) -> Result<()> {
-    let blobs = state.comm.blobs.clone();
-    let shared_files = state
-        .db
-        .list_files(topic.topic_id.clone(), Some(node_id.to_string()))
-        .await?;
-    for file in shared_files.iter() {
-        let file_path = file
-            .absolute_path
-            .as_ref()
-            .expect("Files shared by owner must have the path saved");
-        let path = std::path::Path::new(file_path);
-        if path.exists() {
-            blobs.store().add_path(path).await.unwrap();
-        }
-    }
-    Ok(())
-}

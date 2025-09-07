@@ -62,12 +62,10 @@ pub fn run() {
                     .expect("failed to initialize database");
 
                 let endpoint = init_node(&pool).await.expect("failed to initialize node");
-                let app_state = AppState {
-                    db: pool,
-                    comm: CommState::init_from_endpoint(endpoint)
-                        .await
-                        .expect("failed to initialize comm state"),
-                };
+                let comm = CommState::init_from_endpoint(endpoint, data_dir)
+                    .await
+                    .expect("failed to initialize comm state");
+                let app_state = AppState { db: pool, comm };
 
                 match &app_state.db.get_user_by_id(1).await {
                     Ok(user) => {
