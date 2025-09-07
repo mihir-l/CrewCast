@@ -6,7 +6,6 @@ use tokio_util::sync::CancellationToken;
 
 use crate::{
     comm::{subscribe, ticket::Ticket},
-    commands::file::load_files_for_topic,
     database::topic::{Topic, TopicOperations},
     error::{Error, Result},
     AppState,
@@ -136,7 +135,6 @@ pub async fn join_topic_with_id(
     let topic = state.db.get_topic_by_id(id).await?;
     let endpoint = state.comm.endpoint.clone();
     let node_id = endpoint.node_id().to_string();
-    load_files_for_topic(&mut state, &topic, &node_id).await?;
     setup_topic_subscription(
         &mut state,
         &mut active_topic,
