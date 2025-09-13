@@ -1,3 +1,24 @@
+/* Scrollable file list for FilesPanel */
+.scrollable-files-list {
+  max-height: 400px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+/* Optional: Custom scrollbar styling for better appearance */
+.scrollable-files-list::-webkit-scrollbar {
+  width: 8px;
+}
+
+.scrollable-files-list::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 4px;
+}
+
+.scrollable-files-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
