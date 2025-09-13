@@ -189,7 +189,7 @@ const FilesPanel: React.FC<FilesPanelProps> = ({ topicId }) => {
                     </button>
                 </div>
             ) : (
-                <div className="files-list">
+                <div className="files-list scrollable-files-list">
                     {files.map((file) => (
                         <div key={file.id} style={{
                             background: 'var(--surface)',
