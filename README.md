@@ -1,5 +1,7 @@
 # CrewCast
 
+[![Rust CI](https://github.com/mihir-l/CrewCast/workflows/Rust%20CI/badge.svg)](https://github.com/mihir-l/CrewCast/actions/workflows/rust.yml)
+
 CrewCast is a modern desktop application for sharing media and files with friends, built on top of the [iroh](https://github.com/n0-computer/iroh) protocol. It provides a simple, secure, and decentralized way to create topics (groups), chat, and share files with other users.
 
 ## Features
