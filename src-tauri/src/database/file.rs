@@ -4,6 +4,15 @@ use super::Db;
 use serde::{Deserialize, Serialize};
 use sqlx::{prelude::Type, FromRow};
 
+pub struct TsFilter {
+    pub timestamp: i64,
+    pub direction: TsDirection,
+}
+
+pub enum TsDirection {
+    Newer,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Type)]
 #[sqlx(type_name = "TEXT")]
 pub enum FileStatus {
@@ -65,8 +74,14 @@ impl File {
 
 pub trait FileOperations {
     async fn create_file(&self, file: File) -> Result<File>;
-    async fn list_files(&self, topic_id: String, node_id: Option<String>) -> Result<Vec<File>>;
+    async fn list_files(
+        &self,
+        topic_id: String,
+        node_id: Option<String>,
+        ts_filter: Option<TsFilter>,
+    ) -> Result<Vec<File>>;
     async fn update_file(&self, id: i64, status: FileStatus) -> Result<File>;
+    async fn get_file_by_hash(&self, hash: String) -> Result<File>;
 }
 
 impl FileOperations for Db {
@@ -93,18 +108,33 @@ impl FileOperations for Db {
         Ok(file)
     }
 
-    async fn list_files(&self, topic_id: String, node_id: Option<String>) -> Result<Vec<File>> {
+    async fn list_files(
+        &self,
+        topic_id: String,
+        node_id: Option<String>,
+        ts_filter: Option<TsFilter>,
+    ) -> Result<Vec<File>> {
         let mut query = String::from(
         "SELECT id, node_id, topic_id, hash, name, absolute_path, size, format, status, shared_at FROM files WHERE topic_id = ?"
     );
         if node_id.is_some() {
             query.push_str(" AND node_id = ?");
         }
+        if let Some(ts_filter) = ts_filter.as_ref() {
+            query.push_str(" AND shared_at ");
+            query.push_str(match ts_filter.direction {
+                TsDirection::Newer => ">",
+            });
+            query.push_str(" ?");
+        }
         query.push_str(" ORDER BY shared_at DESC");
 
         let mut q = sqlx::query_as::<_, File>(&query).bind(&topic_id);
         if let Some(ref node_id) = node_id {
             q = q.bind(node_id);
+        }
+        if let Some(ts_filter) = ts_filter {
+            q = q.bind(ts_filter.timestamp);
         }
         let files = q.fetch_all(&self.0).await?;
         Ok(files)
@@ -121,6 +151,21 @@ impl FileOperations for Db {
                 "#,
             status,
             id
+        )
+        .fetch_one(&self.0)
+        .await?;
+        Ok(file)
+    }
+
+    async fn get_file_by_hash(&self, hash: String) -> Result<File> {
+        let file = sqlx::query_as!(
+            File,
+            r#"
+                SELECT id, node_id, topic_id, hash, name, absolute_path, size, format, status, shared_at
+                FROM files
+                WHERE hash = $1
+                "#,
+            hash
         )
         .fetch_one(&self.0)
         .await?;

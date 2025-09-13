@@ -1,7 +1,5 @@
 use iroh::{Endpoint, SecretKey};
 use iroh_gossip::{net::Gossip, proto::TopicId};
-use tauri::State;
-use tokio::sync::Mutex;
 
 use crate::{
     comm::model::UserInfo,
@@ -9,9 +7,9 @@ use crate::{
         node::{Node, NodeOperations},
         topic::{Topic, TopicOperations},
         user::{User, UserOperations},
+        Db,
     },
     error::{Error, Result},
-    AppState,
 };
 
 pub async fn create_endpoint(encoded_secret: String) -> Result<Endpoint> {
@@ -48,12 +46,11 @@ pub fn new_topic() -> TopicId {
 }
 
 pub async fn update_topic(
-    state: State<'_, Mutex<AppState>>,
+    db: &Db,
     topic_id: String,
     member: String,
     user_info: UserInfo,
 ) -> Result<Topic> {
-    let db = &state.lock().await.db;
     let topic = db.get_topic_by_topic_id(topic_id).await?;
 
     let node = match db.get_node_by_node_id(member.clone()).await {

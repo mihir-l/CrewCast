@@ -10,7 +10,7 @@ pub(crate) mod topic;
 pub(crate) mod user;
 static MIGRATOR: Migrator = sqlx::migrate!();
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Db(Pool<Sqlite>);
 
 impl Db {
