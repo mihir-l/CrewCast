@@ -1,0 +1,6 @@
+# Rust formatting configuration for CrewCast (stable features only)
+edition = "2021"
+max_width = 120
+hard_tabs = true
+tab_spaces = 4
+match_block_trailing_comma = true
