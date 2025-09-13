@@ -73,11 +73,7 @@ pub async fn start_new_topic(
     state.comm.topic_sender = Some(sender);
     *active_topic = Some(topic.clone());
 
-    Ok(format!(
-        "{name}:{ticket}",
-        name = topic.name,
-        ticket = ticket.to_string()
-    ))
+    Ok(format!("{name}:{ticket}", name = topic.name))
 }
 
 #[tauri::command]
@@ -164,7 +160,7 @@ pub async fn leave_topic(
 
     let mut topic = active_topic.lock().await;
 
-    if let Some(_) = *topic {
+    if topic.is_some() {
         state.comm.topic_cancel_token.as_ref().unwrap().cancel();
         state.comm.topic_sender = None;
         let subscriber = state
@@ -189,11 +185,7 @@ pub async fn get_ticket_for_topic(
     let state = app_state.lock().await;
     let topic = state.db.get_topic_by_topic_id(topic_id).await?;
     let ticket = Ticket::new(&topic.topic_id, topic.get_peers())?;
-    Ok(format!(
-        "{name}:{ticket}",
-        name = topic.name,
-        ticket = ticket.to_string()
-    ))
+    Ok(format!("{name}:{ticket}", name = topic.name,))
 }
 
 async fn setup_topic_subscription(

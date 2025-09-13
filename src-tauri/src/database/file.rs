@@ -2,7 +2,8 @@ use crate::error::Result;
 
 use super::Db;
 use serde::{Deserialize, Serialize};
-use sqlx::{prelude::Type, FromRow};
+use sqlx::{prelude::Type, FromRow, Row};
+use std::collections::HashMap;
 
 pub struct TsFilter {
     pub timestamp: i64,
@@ -46,6 +47,7 @@ pub struct File {
 }
 
 impl File {
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         node_id: String,
         topic_id: String,
@@ -82,6 +84,11 @@ pub trait FileOperations {
     ) -> Result<Vec<File>>;
     async fn update_file(&self, id: i64, status: FileStatus) -> Result<File>;
     async fn get_file_by_hash(&self, hash: String) -> Result<File>;
+    async fn get_latest_file_timestamps_by_members(
+        &self,
+        topic_id: &str,
+        members: &[String],
+    ) -> Result<HashMap<String, i64>>;
 }
 
 impl FileOperations for Db {
@@ -170,5 +177,49 @@ impl FileOperations for Db {
         .fetch_one(&self.0)
         .await?;
         Ok(file)
+    }
+
+    async fn get_latest_file_timestamps_by_members(
+        &self,
+        topic_id: &str,
+        members: &[String],
+    ) -> Result<HashMap<String, i64>> {
+        let mut result = HashMap::new();
+
+        if members.is_empty() {
+            return Ok(result);
+        }
+
+        // Create placeholders for SQL IN clause
+        let placeholders = members.iter().map(|_| "?").collect::<Vec<_>>().join(", ");
+        let query = format!(
+            r#"
+                SELECT node_id, MAX(shared_at) as latest_timestamp
+                FROM files 
+                WHERE topic_id = ? AND node_id IN ({})
+                GROUP BY node_id
+                "#,
+            placeholders
+        );
+
+        let mut query_builder = sqlx::query(&query).bind(topic_id);
+        for member in members {
+            query_builder = query_builder.bind(member);
+        }
+
+        let rows = query_builder.fetch_all(&self.0).await?;
+
+        for row in rows {
+            let node_id: String = row.get("node_id");
+            let timestamp: Option<i64> = row.get("latest_timestamp");
+            result.insert(node_id, timestamp.unwrap_or(0));
+        }
+
+        // Fill in 0 for members with no files
+        for member in members {
+            result.entry(member.clone()).or_insert(0);
+        }
+
+        Ok(result)
     }
 }

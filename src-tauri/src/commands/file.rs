@@ -61,11 +61,7 @@ pub async fn share_file(
     let ticket = BlobTicket::new(node_addr, file_tag.hash, file_tag.format);
 
     let ts = chrono::Utc::now().timestamp();
-    let metadata = model::Metadata::new(
-        user_info.lock().await.clone(),
-        node_id.clone(),
-        Some(ts.clone()),
-    );
+    let metadata = model::Metadata::new(user_info.lock().await.clone(), node_id.clone(), Some(ts));
     let message = model::Message::new(
         model::File::new(file_name.clone(), ticket.to_string(), file_size, ts),
         metadata,

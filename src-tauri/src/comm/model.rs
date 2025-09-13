@@ -13,6 +13,9 @@ pub enum MessageType {
 
     // This type will be sent by any node that wants to share a file
     File(Message<File>),
+
+    // This type will be sent by any node that wants to share multiple files at once for syncing
+    FileBatch(Message<FileBatch>),
 }
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
@@ -90,6 +93,21 @@ impl File {
             blob_ticket,
             size,
             shared_at,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+pub struct FileBatch {
+    pub files: Vec<File>,
+    pub sync_request_node: String, // The node that requested this batch
+}
+
+impl FileBatch {
+    pub fn new(files: Vec<File>, sync_request_node: String) -> Self {
+        Self {
+            files,
+            sync_request_node,
         }
     }
 }

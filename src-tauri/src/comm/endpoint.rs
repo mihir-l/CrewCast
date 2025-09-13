@@ -61,7 +61,7 @@ pub async fn update_topic(
             db.create_node(node).await?
         }
     };
-    if !db.get_user_by_node_id(node.id).await.is_ok() {
+    if db.get_user_by_node_id(node.id).await.is_err() {
         let user = User::new(
             user_info.email,
             user_info.first_name,

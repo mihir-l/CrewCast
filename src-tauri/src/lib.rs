@@ -57,7 +57,7 @@ pub fn run() {
                 let db_path = data_dir.join("data.db");
 
                 // create the database pool
-                let pool = Db::init(&db_path.to_string_lossy().to_string(), password)
+                let pool = Db::init(db_path.to_string_lossy().as_ref(), password)
                     .await
                     .expect("failed to initialize database");
 
