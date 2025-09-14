@@ -6,6 +6,14 @@ export interface UserInfo {
     nodeId: string;
 }
 
+export interface User {
+    id: number;
+    email: string;
+    firstName: string;
+    lastName?: string;
+    nodeId?: number; // Foreign key to nodes table
+}
+
 export interface Topic {
     id: number;
     topicId: string; // For frontend compatibility
@@ -32,6 +40,15 @@ export interface Message {
     sender: string;
     firstName?: string;
     timestamp: number;
+}
+
+export interface Chat {
+    id: number;
+    nodeId: string;
+    topicId: string;
+    hash: string;
+    message: string;
+    sharedAt: number;
 }
 
 export interface Member {

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { toast } from 'react-toastify';
-import { Member } from '../types/interfaces';
+import { Member, User } from '../types/interfaces';
 
 interface MembersPanelProps {
     topicId: string;
@@ -15,7 +15,10 @@ const MembersPanel: React.FC<MembersPanelProps> = ({ topicId }) => {
     const fetchMembers = async () => {
         setLoading(true);
         try {
-            // Get topic info which includes members
+            // Use get_users_by_topic_id to get all users for the topic efficiently
+            const users = await invoke<User[]>('get_users_by_topic_id', { topicId });
+
+            // Get topic info to get all member node_ids
             const topic = await invoke<{ members: string[] }>('get_topic_by_topic_id', { topicId });
 
             if (!topic.members) {
@@ -24,18 +27,44 @@ const MembersPanel: React.FC<MembersPanelProps> = ({ topicId }) => {
                 return;
             }
 
-            // Fetch user info for each member
-            const memberPromises = topic.members.map(async (nodeId) => {
-                try {
-                    const user = await invoke<any>('get_user_by_node_id', { nodeId });
+            // For each user, get their node info to map to iroh node_id
+            // This is more efficient than individual get_user_by_node_id calls
+            const userNodePromises = users.map(async (user) => {
+                if (user.nodeId) {
+                    try {
+                        const node = await invoke<{ nodeId: string }>('get_node_by_id', { id: user.nodeId });
+                        return { user, irohNodeId: node.nodeId };
+                    } catch (error) {
+                        return null;
+                    }
+                }
+                return null;
+            });
+
+            const userNodeMappings = await Promise.all(userNodePromises);
+
+            // Create a map of users by iroh node_id
+            const userMap = new Map<string, User>();
+            userNodeMappings.forEach(mapping => {
+                if (mapping) {
+                    userMap.set(mapping.irohNodeId, mapping.user);
+                }
+            });
+
+            // Map all members (including those without user records)
+            const fetchedMembers: Member[] = topic.members.map((nodeId) => {
+                const user = userMap.get(nodeId);
+
+                if (user) {
                     return {
                         nodeId,
-                        firstName: user.firstName || 'Unknown',
+                        firstName: user.firstName,
                         lastName: user.lastName,
                         lastSeen: Date.now(),
                         isActive: true
                     };
-                } catch (error) {
+                } else {
+                    // Member without user record
                     return {
                         nodeId,
                         firstName: 'Unknown User',
@@ -46,7 +75,6 @@ const MembersPanel: React.FC<MembersPanelProps> = ({ topicId }) => {
                 }
             });
 
-            const fetchedMembers = await Promise.all(memberPromises);
             setMembers(fetchedMembers);
         } catch (error) {
             console.error('Failed to fetch members:', error);

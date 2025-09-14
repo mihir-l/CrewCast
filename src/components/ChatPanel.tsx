@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { toast } from 'react-toastify';
-import { Message } from '../types/interfaces';
+import { Chat, User } from '../types/interfaces';
 import { useUser } from '../contexts/UserContext';
 
 interface ChatPanelProps {
@@ -10,9 +10,10 @@ interface ChatPanelProps {
 }
 
 const ChatPanel: React.FC<ChatPanelProps> = ({ topicId }) => {
-    const [messages, setMessages] = useState<Message[]>([]);
+    const [chats, setChats] = useState<Chat[]>([]);
     const [messageInput, setMessageInput] = useState('');
     const [userCache, setUserCache] = useState<Record<string, { firstName: string }>>({});
+    const [loading, setLoading] = useState(true);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const { currentUser } = useUser();
 
@@ -23,7 +24,44 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ topicId }) => {
 
     useEffect(() => {
         scrollToBottom();
-    }, [messages]);
+    }, [chats]);
+
+    // Load existing chats when topic changes
+    const loadChats = async () => {
+        if (!topicId) return;
+
+        try {
+            setLoading(true);
+            const existingChats = await invoke<Chat[]>('list_messages', { topicId });
+            setChats(existingChats.reverse()); // Reverse to show oldest first
+
+            // Pre-load users for this topic to avoid individual calls
+            const users = await invoke<User[]>('get_users_by_topic_id', { topicId });
+
+            // Map users to their iroh node_ids
+            const newUserCache: Record<string, { firstName: string }> = {};
+
+            for (const user of users) {
+                if (user.nodeId) {
+                    try {
+                        const node = await invoke<{ nodeId: string }>('get_node_by_id', { id: user.nodeId });
+                        newUserCache[node.nodeId] = { firstName: user.firstName };
+                    } catch (error) {
+                        console.warn(`Failed to get node for user ${user.id}:`, error);
+                    }
+                }
+            }
+
+            setUserCache(newUserCache);
+        } catch (error) {
+            console.error('Failed to load chats:', error);
+            toast.error('Failed to load chat history');
+        } finally {
+            setLoading(false);
+        }
+    }; useEffect(() => {
+        loadChats();
+    }, [topicId]);
 
     // Function to fetch user by nodeId and cache it
     const fetchUserByNodeId = async (nodeId: string) => {
@@ -52,18 +90,40 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ topicId }) => {
                 const parsedMessage = JSON.parse(message);
 
                 if (parsedMessage.type === 'chat') {
-                    const sender = parsedMessage.sender;
-                    const user = await fetchUserByNodeId(sender);
-
-                    setMessages(prev => [
-                        ...prev,
-                        {
-                            content: parsedMessage.content,
-                            sender: parsedMessage.sender,
-                            firstName: user.firstName,
-                            timestamp: Date.now()
-                        }
-                    ]);
+                    // Single chat message
+                    if (parsedMessage.chat) {
+                        // Use the full chat object from the database
+                        const newChat: Chat = parsedMessage.chat;
+                        setChats(prev => [...prev, newChat]);
+                    } else {
+                        // Fallback for older format
+                        const sender = parsedMessage.sender;
+                        const newChat: Chat = {
+                            id: 0,
+                            nodeId: sender,
+                            topicId: topicId,
+                            hash: '',
+                            message: parsedMessage.content,
+                            sharedAt: Date.now() / 1000 // Convert to Unix timestamp
+                        };
+                        setChats(prev => [...prev, newChat]);
+                    }
+                } else if (parsedMessage.type === 'chat_batch') {
+                    // Batch of chat messages
+                    const newChats: Chat[] = parsedMessage.chats || [];
+                    if (newChats.length > 0) {
+                        // Sort by timestamp to maintain order
+                        newChats.sort((a, b) => a.sharedAt - b.sharedAt);
+                        setChats(prev => [...prev, ...newChats]);
+                    }
+                } else if (parsedMessage.type === 'sync_batch_update') {
+                    // Sync batch with both files and chats
+                    const newChats: Chat[] = parsedMessage.chats || [];
+                    if (newChats.length > 0) {
+                        // Sort by timestamp to maintain order
+                        newChats.sort((a, b) => a.sharedAt - b.sharedAt);
+                        setChats(prev => [...prev, ...newChats]);
+                    }
                 }
             } catch (error) {
                 console.error('Failed to process chat message:', error);
@@ -85,6 +145,8 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ topicId }) => {
         try {
             await invoke('send_message', { message: messageInput });
             setMessageInput('');
+            // Reload chats to get the newly sent message
+            await loadChats();
         } catch (error) {
             console.error('Failed to send message:', error);
             toast.error('Failed to send message');
@@ -107,7 +169,18 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ topicId }) => {
                 flexDirection: 'column',
                 gap: '1.5rem'
             }}>
-                {messages.length === 0 ? (
+                {loading ? (
+                    <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        height: '100%'
+                    }}>
+                        <div style={{ textAlign: 'center' }}>
+                            <p style={{ color: 'var(--textSecondary)', fontSize: '1rem', margin: 0 }}>Loading chats...</p>
+                        </div>
+                    </div>
+                ) : chats.length === 0 ? (
                     <div style={{
                         display: 'flex',
                         alignItems: 'center',
@@ -136,73 +209,16 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ topicId }) => {
                     </div>
                 ) : (
                     <>
-                        {messages.map((msg, index) => {
-                            const isMyMessage = msg.sender === currentUser?.nodeId;
+                        {chats.map((chat, index) => {
+                            const isMyMessage = chat.nodeId === currentUser?.nodeId;
                             return (
-                                <div key={index}>
-                                    {isMyMessage ? (
-                                        // My message - right aligned with blue bubble
-                                        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '0.5rem' }}>
-                                            <div style={{
-                                                background: 'var(--primary)',
-                                                color: 'white',
-                                                padding: '0.75rem 1rem',
-                                                borderRadius: '1rem 1rem 0.25rem 1rem',
-                                                maxWidth: '70%',
-                                                fontSize: '0.875rem',
-                                                lineHeight: '1.4'
-                                            }}>
-                                                {msg.content}
-                                            </div>
-                                        </div>
-                                    ) : (
-                                        // Other's message - left aligned with avatar
-                                        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem', marginBottom: '0.5rem' }}>
-                                            <div style={{
-                                                width: '2.5rem',
-                                                height: '2.5rem',
-                                                borderRadius: '50%',
-                                                background: 'var(--textSecondary)',
-                                                color: 'white',
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                justifyContent: 'center',
-                                                fontSize: '0.875rem',
-                                                fontWeight: '600',
-                                                flexShrink: 0
-                                            }}>
-                                                {(msg.firstName || 'Unknown').substring(0, 2).toUpperCase()}
-                                            </div>
-                                            <div style={{ flex: 1 }}>
-                                                <div style={{
-                                                    background: 'var(--surface)',
-                                                    color: 'var(--text)',
-                                                    padding: '0.75rem 1rem',
-                                                    borderRadius: '1rem 1rem 1rem 0.25rem',
-                                                    maxWidth: '70%',
-                                                    fontSize: '0.875rem',
-                                                    lineHeight: '1.4',
-                                                    border: '1px solid var(--border)'
-                                                }}>
-                                                    {msg.content}
-                                                </div>
-                                            </div>
-                                        </div>
-                                    )}
-                                    {/* Timestamp */}
-                                    <div style={{
-                                        fontSize: '0.75rem',
-                                        color: 'var(--textSecondary)',
-                                        textAlign: isMyMessage ? 'right' : 'left',
-                                        marginLeft: isMyMessage ? '0' : '3.25rem',
-                                        marginBottom: '1rem'
-                                    }}>
-                                        {isMyMessage ?
-                                            new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) :
-                                            `${msg.firstName || 'Unknown'} • ${new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
-                                        }
-                                    </div>
-                                </div>
+                                <ChatMessage
+                                    key={chat.id || index}
+                                    chat={chat}
+                                    isMyMessage={isMyMessage}
+                                    userCache={userCache}
+                                    fetchUserByNodeId={fetchUserByNodeId}
+                                />
                             );
                         })}
                         <div ref={messagesEndRef} />
@@ -273,6 +289,98 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ topicId }) => {
                         </svg>
                     </button>
                 </form>
+            </div>
+        </div>
+    );
+};
+
+// Individual ChatMessage component
+interface ChatMessageProps {
+    chat: Chat;
+    isMyMessage: boolean;
+    userCache: Record<string, { firstName: string }>;
+    fetchUserByNodeId: (nodeId: string) => Promise<{ firstName: string }>;
+}
+
+const ChatMessage: React.FC<ChatMessageProps> = ({ chat, isMyMessage, userCache, fetchUserByNodeId }) => {
+    const [userInfo, setUserInfo] = useState<{ firstName: string } | null>(null);
+
+    useEffect(() => {
+        const getUserInfo = async () => {
+            if (!isMyMessage) {
+                const user = await fetchUserByNodeId(chat.nodeId);
+                setUserInfo(user);
+            }
+        };
+        getUserInfo();
+    }, [chat.nodeId, isMyMessage, fetchUserByNodeId]);
+
+    const displayName = isMyMessage ? 'You' : (userInfo?.firstName || userCache[chat.nodeId]?.firstName || 'Unknown');
+    const timestamp = new Date(chat.sharedAt * 1000); // Convert from Unix timestamp
+
+    return (
+        <div>
+            {isMyMessage ? (
+                // My message - right aligned with blue bubble
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '0.5rem' }}>
+                    <div style={{
+                        background: 'var(--primary)',
+                        color: 'white',
+                        padding: '0.75rem 1rem',
+                        borderRadius: '1rem 1rem 0.25rem 1rem',
+                        maxWidth: '70%',
+                        fontSize: '0.875rem',
+                        lineHeight: '1.4'
+                    }}>
+                        {chat.message}
+                    </div>
+                </div>
+            ) : (
+                // Other's message - left aligned with avatar
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem', marginBottom: '0.5rem' }}>
+                    <div style={{
+                        width: '2.5rem',
+                        height: '2.5rem',
+                        borderRadius: '50%',
+                        background: 'var(--textSecondary)',
+                        color: 'white',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: '0.875rem',
+                        fontWeight: '600',
+                        flexShrink: 0
+                    }}>
+                        {displayName.substring(0, 2).toUpperCase()}
+                    </div>
+                    <div style={{ flex: 1 }}>
+                        <div style={{
+                            background: 'var(--surface)',
+                            color: 'var(--text)',
+                            padding: '0.75rem 1rem',
+                            borderRadius: '1rem 1rem 1rem 0.25rem',
+                            maxWidth: '70%',
+                            fontSize: '0.875rem',
+                            lineHeight: '1.4',
+                            border: '1px solid var(--border)'
+                        }}>
+                            {chat.message}
+                        </div>
+                    </div>
+                </div>
+            )}
+            {/* Timestamp */}
+            <div style={{
+                fontSize: '0.75rem',
+                color: 'var(--textSecondary)',
+                textAlign: isMyMessage ? 'right' : 'left',
+                marginLeft: isMyMessage ? '0' : '3.25rem',
+                marginBottom: '1rem'
+            }}>
+                {isMyMessage ?
+                    timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) :
+                    `${displayName} • ${timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+                }
             </div>
         </div>
     );
