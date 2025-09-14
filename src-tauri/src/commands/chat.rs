@@ -41,7 +41,7 @@ pub async fn send_message(
 			topic_id.clone(),
 			None,
 			message.clone(),
-			metadata.ts.clone(),
+			metadata.ts,
 		))
 		.await?;
 
