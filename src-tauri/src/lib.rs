@@ -27,9 +27,11 @@ pub fn run() {
 		.plugin(tauri_plugin_dialog::init())
 		.plugin(tauri_plugin_opener::init())
 		.invoke_handler(tauri::generate_handler![
-			commands::send_message,
+			commands::chat::send_message,
+			commands::chat::list_messages,
 			commands::user::get_user_by_node_id,
 			commands::user::get_user_by_id,
+			commands::user::get_users_by_topic_id,
 			commands::user::create_user,
 			commands::node::get_node_by_id,
 			commands::topic::start_new_topic,
