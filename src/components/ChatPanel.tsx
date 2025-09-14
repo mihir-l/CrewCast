@@ -17,14 +17,27 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ topicId }) => {
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const { currentUser } = useUser();
 
-    // Scroll to bottom of messages
+    // Scroll to bottom of messages with enhanced behavior
     const scrollToBottom = () => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+        setTimeout(() => {
+            messagesEndRef.current?.scrollIntoView({
+                behavior: 'smooth',
+                block: 'end',
+                inline: 'nearest'
+            });
+        }, 100);
     };
 
     useEffect(() => {
         scrollToBottom();
     }, [chats]);
+
+    // Also scroll to bottom when the component mounts
+    useEffect(() => {
+        if (!loading && chats.length > 0) {
+            scrollToBottom();
+        }
+    }, [loading]);
 
     // Load existing chats when topic changes
     const loadChats = async () => {
@@ -158,17 +171,24 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ topicId }) => {
             display: 'flex',
             flexDirection: 'column',
             height: '100%',
+            minHeight: 0,
             background: 'var(--background)'
         }}>
             {/* Messages Container */}
-            <div style={{
-                flex: 1,
-                overflowY: 'auto',
-                padding: '1.5rem',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '1.5rem'
-            }}>
+            <div
+                style={{
+                    flex: 1,
+                    minHeight: 0,
+                    overflowY: 'auto',
+                    overflowX: 'hidden',
+                    padding: '1.5rem',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '0.75rem',
+                    scrollBehavior: 'smooth'
+                }}
+                className="custom-scrollbar"
+            >
                 {loading ? (
                     <div style={{
                         display: 'flex',
@@ -221,16 +241,17 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ topicId }) => {
                                 />
                             );
                         })}
-                        <div ref={messagesEndRef} />
+                        <div ref={messagesEndRef} style={{ height: '0.5rem', flexShrink: 0 }} />
                     </>
                 )}
             </div>
 
             {/* Message Input */}
             <div style={{
-                padding: '1rem 1.5rem',
+                padding: '1.25rem 1.5rem',
                 borderTop: '1px solid var(--border)',
-                background: 'var(--background)'
+                background: 'var(--background)',
+                boxShadow: '0 -2px 8px rgba(0, 0, 0, 0.05)'
             }}>
                 <form onSubmit={handleSendMessage} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                     <button
@@ -240,11 +261,12 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ topicId }) => {
                             border: 'none',
                             color: 'var(--textSecondary)',
                             cursor: 'pointer',
-                            padding: '0.5rem',
+                            padding: '0.625rem',
                             borderRadius: '0.5rem',
                             display: 'flex',
                             alignItems: 'center',
-                            justifyContent: 'center'
+                            justifyContent: 'center',
+                            transition: 'all 0.2s ease'
                         }}
                         title="Attach file"
                     >
@@ -259,28 +281,34 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ topicId }) => {
                         placeholder="Type a message..."
                         style={{
                             flex: 1,
-                            padding: '0.75rem 1rem',
+                            padding: '0.875rem 1.125rem',
                             border: '1px solid var(--border)',
                             borderRadius: '1.5rem',
                             background: 'var(--surface)',
                             color: 'var(--text)',
                             fontSize: '0.875rem',
-                            outline: 'none'
+                            outline: 'none',
+                            transition: 'all 0.2s ease',
+                            boxShadow: '0 2px 4px rgba(0, 0, 0, 0.05)'
                         }}
                     />
                     <button
                         type="submit"
+                        disabled={!messageInput.trim()}
                         style={{
-                            background: 'var(--primary)',
+                            background: messageInput.trim() ? 'linear-gradient(135deg, var(--primary) 0%, #4f46e5 100%)' : 'var(--textSecondary)',
                             border: 'none',
                             color: 'white',
-                            cursor: 'pointer',
-                            padding: '0.75rem',
+                            cursor: messageInput.trim() ? 'pointer' : 'not-allowed',
+                            padding: '0.875rem',
                             borderRadius: '50%',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
-                            transition: 'opacity 0.2s'
+                            transition: 'all 0.2s ease',
+                            boxShadow: messageInput.trim() ? '0 2px 8px rgba(0, 0, 0, 0.15)' : 'none',
+                            transform: messageInput.trim() ? 'scale(1)' : 'scale(0.95)',
+                            opacity: messageInput.trim() ? '1' : '0.6'
                         }}
                         title="Send message"
                     >
@@ -319,37 +347,42 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ chat, isMyMessage, userCache,
     const timestamp = new Date(chat.sharedAt * 1000); // Convert from Unix timestamp
 
     return (
-        <div>
+        <div style={{ marginBottom: '1rem' }}>
             {isMyMessage ? (
-                // My message - right aligned with blue bubble
-                <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '0.5rem' }}>
+                // My message - right aligned with improved styling
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '0.25rem' }}>
                     <div style={{
-                        background: 'var(--primary)',
+                        background: 'linear-gradient(135deg, var(--primary) 0%, #4f46e5 100%)',
                         color: 'white',
-                        padding: '0.75rem 1rem',
-                        borderRadius: '1rem 1rem 0.25rem 1rem',
-                        maxWidth: '70%',
+                        padding: '0.875rem 1.125rem',
+                        borderRadius: '1.25rem 1.25rem 0.375rem 1.25rem',
+                        maxWidth: '75%',
                         fontSize: '0.875rem',
-                        lineHeight: '1.4'
+                        lineHeight: '1.5',
+                        boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)',
+                        position: 'relative',
+                        wordWrap: 'break-word',
+                        transition: 'transform 0.1s ease'
                     }}>
                         {chat.message}
                     </div>
                 </div>
             ) : (
                 // Other's message - left aligned with avatar
-                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem', marginBottom: '0.5rem' }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem', marginBottom: '0.25rem' }}>
                     <div style={{
                         width: '2.5rem',
                         height: '2.5rem',
                         borderRadius: '50%',
-                        background: 'var(--textSecondary)',
+                        background: 'linear-gradient(135deg, var(--textSecondary) 0%, #6b7280 100%)',
                         color: 'white',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
                         fontSize: '0.875rem',
                         fontWeight: '600',
-                        flexShrink: 0
+                        flexShrink: 0,
+                        boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)'
                     }}>
                         {displayName.substring(0, 2).toUpperCase()}
                     </div>
@@ -357,12 +390,14 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ chat, isMyMessage, userCache,
                         <div style={{
                             background: 'var(--surface)',
                             color: 'var(--text)',
-                            padding: '0.75rem 1rem',
-                            borderRadius: '1rem 1rem 1rem 0.25rem',
-                            maxWidth: '70%',
+                            padding: '0.875rem 1.125rem',
+                            borderRadius: '1.25rem 1.25rem 1.25rem 0.375rem',
+                            maxWidth: '75%',
                             fontSize: '0.875rem',
-                            lineHeight: '1.4',
-                            border: '1px solid var(--border)'
+                            lineHeight: '1.5',
+                            border: '1px solid var(--border)',
+                            boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)',
+                            wordWrap: 'break-word'
                         }}>
                             {chat.message}
                         </div>
@@ -375,7 +410,7 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ chat, isMyMessage, userCache,
                 color: 'var(--textSecondary)',
                 textAlign: isMyMessage ? 'right' : 'left',
                 marginLeft: isMyMessage ? '0' : '3.25rem',
-                marginBottom: '1rem'
+                marginTop: '0.25rem'
             }}>
                 {isMyMessage ?
                     timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) :

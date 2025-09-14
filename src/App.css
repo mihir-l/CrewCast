@@ -1070,3 +1070,22 @@ body {
   background: rgba(37, 99, 235, 0.1);
   border: 2px solid var(--primary);
 }
+
+/* Custom scrollbar for chat panel (matches files panel) */
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 8px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
