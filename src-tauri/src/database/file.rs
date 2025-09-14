@@ -1,18 +1,12 @@
-use crate::error::Result;
+use crate::{
+	database::common::{TsDirection, TsFilter},
+	error::Result,
+};
 
 use super::Db;
 use serde::{Deserialize, Serialize};
 use sqlx::{prelude::Type, FromRow, Row};
 use std::collections::HashMap;
-
-pub struct TsFilter {
-	pub timestamp: i64,
-	pub direction: TsDirection,
-}
-
-pub enum TsDirection {
-	Newer,
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Type)]
 #[sqlx(type_name = "TEXT")]

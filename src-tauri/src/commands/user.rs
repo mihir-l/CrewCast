@@ -7,6 +7,7 @@ use crate::{
 	comm::model::UserInfo,
 	database::{
 		node::NodeOperations,
+		topic::TopicOperations,
 		user::{User, UserOperations},
 	},
 	error::Result,
@@ -64,4 +65,14 @@ pub async fn create_user(
 	}
 
 	Ok(user)
+}
+
+#[tauri::command]
+pub async fn get_users_by_topic_id(app_state: State<'_, Mutex<AppState>>, topic_id: String) -> Result<Vec<User>> {
+	let state = app_state.lock().await;
+	let db = &state.db;
+	let topic = db.get_topic_by_topic_id(topic_id).await?;
+	let members = topic.get_peers();
+	let users = db.get_users_by_node_ids(&members).await?;
+	Ok(users)
 }

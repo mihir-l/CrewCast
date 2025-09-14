@@ -46,7 +46,7 @@ const TopicDetailsPage: React.FC = () => {
     };
 
     return (
-        <div className="flex-1 flex flex-col" style={{ background: 'var(--background)' }}>
+        <div className="flex-1 flex flex-col" style={{ background: 'var(--background)', minHeight: 0 }}>
             {/* Topic Header */}
             <div style={{
                 background: 'var(--surface)',
@@ -118,7 +118,7 @@ const TopicDetailsPage: React.FC = () => {
                 </div>
 
                 {/* Tab Navigation */}
-                <div className="flex space-x-1 mt-4">
+                <div className="flex space-x-2 mt-4" style={{ borderBottom: '2px solid var(--border)', paddingBottom: '0.25rem' }}>
                     {[
                         { key: 'chat' as const, icon: 'MessageCircle', label: 'Chat' },
                         { key: 'files' as const, icon: 'Files', label: 'Files' },
@@ -127,10 +127,17 @@ const TopicDetailsPage: React.FC = () => {
                         <button
                             key={key}
                             onClick={() => setActiveTab(key)}
-                            className="flex items-center space-x-2 px-4 py-2 rounded-lg transition-all duration-200"
+                            className="flex items-center space-x-2 px-4 py-2 rounded-t-lg transition-all duration-200"
                             style={{
-                                background: activeTab === key ? 'var(--primary)' : 'transparent',
-                                color: activeTab === key ? 'white' : 'var(--textSecondary)'
+                                background: 'none',
+                                border: 'none',
+                                borderBottom: activeTab === key ? '3px solid var(--primary)' : '3px solid transparent',
+                                color: activeTab === key ? 'var(--primary)' : 'var(--textSecondary)',
+                                fontWeight: activeTab === key ? 700 : 500,
+                                outline: 'none',
+                                boxShadow: activeTab === key ? '0 2px 8px rgba(0,0,0,0.04)' : 'none',
+                                cursor: 'pointer',
+                                transition: 'all 0.2s'
                             }}
                         >
                             {icon === 'MessageCircle' && (

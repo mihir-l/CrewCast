@@ -9,13 +9,13 @@ pub enum MessageType {
 	CheckIn(Message<CheckIn>),
 
 	// This type will be sent by any node that want to share a message by its user
-	Chat(Message<Chat>),
+	Chat(Message<ChatMessage>),
 
 	// This type will be sent by any node that wants to share a file
 	File(Message<File>),
 
 	// This type will be sent by any node that wants to share multiple files at once for syncing
-	FileBatch(Message<FileBatch>),
+	SyncBatchUpdate(Message<SyncBatchUpdate>),
 }
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
@@ -55,26 +55,41 @@ pub struct UserInfo {
 	pub first_name: String,
 	pub last_name: Option<String>,
 }
+
+#[derive(Debug, Default, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+pub struct SyncInfo {
+	pub latest_file_ts: i64,
+	pub latest_chat_ts: i64,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct CheckIn {
 	pub topic_id: String,
-	pub sync: HashMap<String, i64>,
+	pub sync: HashMap<String, SyncInfo>,
 }
 
 impl CheckIn {
-	pub fn new(topic_id: String, sync: HashMap<String, i64>) -> Self {
+	pub fn new(topic_id: String, sync: HashMap<String, SyncInfo>) -> Self {
 		Self { topic_id, sync }
 	}
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
-pub struct Chat {
+pub struct ChatMessage {
+	pub topic_id: String,
 	pub content: String,
+	pub hash: String,
+	pub shared_at: i64,
 }
 
-impl Chat {
-	pub fn new(content: String) -> Self {
-		Self { content }
+impl ChatMessage {
+	pub fn new(content: String, topic_id: String, hash: String, shared_at: i64) -> Self {
+		Self {
+			content,
+			topic_id,
+			hash,
+			shared_at,
+		}
 	}
 }
 
@@ -98,15 +113,17 @@ impl File {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
-pub struct FileBatch {
+pub struct SyncBatchUpdate {
 	pub files: Vec<File>,
+	pub chats: Vec<ChatMessage>,
 	pub sync_request_node: String, // The node that requested this batch
 }
 
-impl FileBatch {
-	pub fn new(files: Vec<File>, sync_request_node: String) -> Self {
+impl SyncBatchUpdate {
+	pub fn new(files: Vec<File>, chats: Vec<ChatMessage>, sync_request_node: String) -> Self {
 		Self {
 			files,
+			chats,
 			sync_request_node,
 		}
 	}

@@ -11,10 +11,12 @@ use tokio_util::sync::CancellationToken;
 use crate::{
 	comm::{
 		endpoint::update_topic,
-		model::{CheckIn, FileBatch, MessageType, UserInfo},
+		model::{CheckIn, MessageType, SyncBatchUpdate, SyncInfo, UserInfo},
 	},
 	database::{
-		file::{File, FileOperations, FileStatus, TsDirection, TsFilter},
+		chat::{Chat, ChatOperations},
+		common::{TsDirection, TsFilter},
+		file::{File, FileOperations, FileStatus},
 		topic::TopicOperations,
 		Db,
 	},
@@ -28,6 +30,7 @@ pub mod state;
 pub mod ticket;
 
 const MAX_FILES_PER_BATCH: usize = 50; // Limit batch size to avoid huge messages
+const MAX_CHATS_PER_BATCH: usize = 100; // Chats are smaller, so we can send more per batch
 
 pub async fn subscribe(
 	mut receiver: GossipReceiver,
@@ -150,24 +153,36 @@ async fn subscription_handler(
 					.await?;
 
 					// Check if we need to send files to the target node
-					if let Some(&latest) = msg.data.sync.get(&my_node_id) {
+					if let Some(&sync_info) = msg.data.sync.get(&my_node_id) {
 						let files = db
 							.list_files(
 								topic_id.clone(),
 								Some(my_node_id.clone()),
 								Some(TsFilter {
-									timestamp: latest,
+									timestamp: sync_info.latest_file_ts,
 									direction: TsDirection::Newer,
 								}),
 							)
 							.await?;
 
+						let chats = db
+							.list_chats(
+								topic_id.clone(),
+								Some(my_node_id.clone()),
+								Some(TsFilter {
+									timestamp: sync_info.latest_chat_ts,
+									direction: TsDirection::Newer,
+								}),
+							)
+							.await?;
+
+						let mut batch_files: Vec<model::File> = Vec::with_capacity(files.len());
 						// Send files as a batch if there are any
 						if !files.is_empty() {
 							let my_node_addr = my_endpoint.node_addr().get().unwrap();
 
 							// Convert database files to model files
-							let batch_files: Vec<model::File> = files
+							batch_files = files
 								.iter()
 								.rev() // Send newest first
 								.map(|file| {
@@ -182,22 +197,72 @@ async fn subscription_handler(
 									model::File::new(file.name.clone(), ticket.to_string(), file.size, file.shared_at)
 								})
 								.collect();
+						}
 
-							// Send files in chunks if too many
-							for chunk in batch_files.chunks(MAX_FILES_PER_BATCH) {
-								let metadata = model::Metadata::new(me.clone(), my_node_id.clone(), None);
-								let batch_message =
-									model::Message::new(FileBatch::new(chunk.to_vec(), target_node.clone()), metadata);
-								let message = MessageType::FileBatch(batch_message);
+						let mut batch_chats: Vec<model::ChatMessage> = Vec::with_capacity(chats.len());
+						if !chats.is_empty() {
+							batch_chats = chats
+								.iter()
+								.rev() // Send newest first
+								.map(|chat| {
+									model::ChatMessage::new(
+										chat.message.clone(),
+										chat.topic_id.clone(),
+										chat.hash.clone(),
+										chat.shared_at,
+									)
+								})
+								.collect();
+						}
 
-								// Send batch message
-								if let Ok(serialized) = serde_json::to_vec(&message) {
-									topic_sender.broadcast(serialized.into()).await.ok();
+						// Send files in chunks if too many
+						if !batch_files.is_empty() || !batch_chats.is_empty() {
+							// Calculate how many sync batches we need to send
+							let max_files_per_batch = MAX_FILES_PER_BATCH;
+							let max_chats_per_batch = MAX_CHATS_PER_BATCH;
+
+							let file_chunks = if batch_files.is_empty() {
+								vec![Vec::new()]
+							} else {
+								batch_files
+									.chunks(max_files_per_batch)
+									.map(|chunk| chunk.to_vec())
+									.collect::<Vec<_>>()
+							};
+
+							let chat_chunks = if batch_chats.is_empty() {
+								vec![Vec::new()]
+							} else {
+								batch_chats
+									.chunks(max_chats_per_batch)
+									.map(|chunk| chunk.to_vec())
+									.collect::<Vec<_>>()
+							};
+
+							// Determine how many batches we need (max of file chunks and chat chunks)
+							let num_batches = file_chunks.len().max(chat_chunks.len());
+
+							for i in 0..num_batches {
+								let files_for_batch = file_chunks.get(i).cloned().unwrap_or_default();
+								let chats_for_batch = chat_chunks.get(i).cloned().unwrap_or_default();
+
+								// Only send batch if there's something to send
+								if !files_for_batch.is_empty() || !chats_for_batch.is_empty() {
+									let metadata = model::Metadata::new(me.clone(), my_node_id.clone(), None);
+									let batch_message = model::Message::new(
+										SyncBatchUpdate::new(files_for_batch, chats_for_batch, target_node.clone()),
+										metadata,
+									);
+									let message = MessageType::SyncBatchUpdate(batch_message);
+
+									// Send batch message
+									if let Ok(serialized) = serde_json::to_vec(&message) {
+										topic_sender.broadcast(serialized.into()).await.ok();
+									}
 								}
 							}
 						}
 					}
-
 					Some(
 						serde_json::json!({
 							"type": "check_in",
@@ -207,14 +272,35 @@ async fn subscription_handler(
 						.to_string(),
 					)
 				},
-				MessageType::Chat(msg) => Some(
-					serde_json::json!({
-						"type": "chat",
-						"sender": msg.metadata.sender,
-						"content": msg.data.content,
-					})
-					.to_string(),
-				),
+				MessageType::Chat(msg) => {
+					let state = app_handle.state::<Mutex<AppState>>();
+					let db = &state.lock().await.db;
+					// write to DB
+					match db
+						.create_chat(Chat::new(
+							msg.metadata.sender.clone(),
+							msg.data.topic_id.clone(),
+							Some(msg.data.hash.clone()),
+							msg.data.content.clone(),
+							msg.data.shared_at,
+						))
+						.await
+					{
+						Ok(created_chat) => Some(
+							serde_json::json!({
+								"type": "chat",
+								"sender": msg.metadata.sender,
+								"content": msg.data.content,
+								"chat": created_chat
+							})
+							.to_string(),
+						),
+						Err(e) => {
+							eprintln!("Failed to create chat: {}", e);
+							None
+						},
+					}
+				},
 				MessageType::File(msg) => {
 					let file = msg.data;
 					let metadata = msg.metadata;
@@ -255,13 +341,15 @@ async fn subscription_handler(
 						None
 					}
 				},
-				MessageType::FileBatch(msg) => {
+				MessageType::SyncBatchUpdate(msg) => {
 					let batch = msg.data;
 					let metadata = msg.metadata;
 					let mut created_files = Vec::new();
+					let mut created_chats = Vec::new();
 
 					// Only process batch if it was intended for us or everyone
 					if batch.sync_request_node == my_node_id || batch.sync_request_node.is_empty() {
+						// Process files in the batch
 						for file in batch.files {
 							// Parse blob ticket
 							let ticket = match file.blob_ticket.parse::<BlobTicket>() {
@@ -294,11 +382,48 @@ async fn subscription_handler(
 							}
 						}
 
-						if !created_files.is_empty() {
+						// Process chats in the batch
+						for chat in batch.chats {
+							match db
+								.create_chat(Chat::new(
+									metadata.sender.clone(),
+									chat.topic_id.clone(),
+									Some(chat.hash.clone()),
+									chat.content.clone(),
+									chat.shared_at,
+								))
+								.await
+							{
+								Ok(new_chat) => created_chats.push(new_chat),
+								Err(e) => eprintln!("Failed to create chat from batch: {}", e),
+							}
+						}
+
+						// Emit appropriate events based on what was created
+						if !created_files.is_empty() && !created_chats.is_empty() {
+							Some(
+								serde_json::json!({
+									"type": "sync_batch_update",
+									"files": created_files,
+									"chats": created_chats,
+									"sender": metadata.sender
+								})
+								.to_string(),
+							)
+						} else if !created_files.is_empty() {
 							Some(
 								serde_json::json!({
 									"type": "file_batch",
 									"files": created_files,
+									"sender": metadata.sender
+								})
+								.to_string(),
+							)
+						} else if !created_chats.is_empty() {
+							Some(
+								serde_json::json!({
+									"type": "chat_batch",
+									"chats": created_chats,
 									"sender": metadata.sender
 								})
 								.to_string(),
@@ -377,13 +502,24 @@ async fn check_in_task(
 
 		if !other_members.is_empty() {
 			// Single batched DB call to get all timestamps
-			let timestamps = db
+			let file_timestamps = db
 				.get_latest_file_timestamps_by_members(&topic_id, &other_members)
 				.await?;
 
+			let chat_timestamps = db
+				.get_latest_chat_timestamps_by_members(&topic_id, &other_members)
+				.await?;
+
 			// Populate sync_map with results
-			for (member, timestamp) in timestamps {
-				sync_map.insert(member, timestamp);
+			for (member, file_timestamp) in file_timestamps {
+				let chat_timestamp = chat_timestamps.get(&member).cloned().unwrap_or(0);
+				sync_map.insert(
+					member,
+					SyncInfo {
+						latest_file_ts: file_timestamp,
+						latest_chat_ts: chat_timestamp,
+					},
+				);
 			}
 		}
 

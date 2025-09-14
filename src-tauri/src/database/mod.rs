@@ -4,6 +4,8 @@ use sqlx::{migrate::Migrator, sqlite::SqliteConnectOptions, Pool, Sqlite};
 
 use crate::error::Result;
 
+pub(crate) mod chat;
+pub(crate) mod common;
 pub(crate) mod file;
 pub(crate) mod node;
 pub(crate) mod topic;

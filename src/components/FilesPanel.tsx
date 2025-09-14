@@ -3,7 +3,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { open } from '@tauri-apps/plugin-dialog';
 import { toast } from 'react-toastify';
-import { SharedFile } from '../types/interfaces';
+import { SharedFile, User } from '../types/interfaces';
 import { useUser } from '../contexts/UserContext';
 
 interface FilesPanelProps {
@@ -23,19 +23,43 @@ const FilesPanel: React.FC<FilesPanelProps> = ({ topicId }) => {
             console.log('Fetching files for topic:', topicId);
             const fetchedFiles = await invoke<SharedFile[]>('list_files', { topicId: topicId });
 
-            // Add sender name if possible
-            const enhancedFiles = await Promise.all(
-                fetchedFiles.map(async (file) => {
+            // Get all users for the topic efficiently
+            const users = await invoke<User[]>('get_users_by_topic_id', { topicId });
+
+            // Create a map for user lookup by nodeId (database node id)
+            const userMap = new Map<number, User>();
+            users.forEach(user => {
+                if (user.nodeId) {
+                    userMap.set(user.nodeId, user);
+                }
+            });
+
+            // Also need to map iroh node_ids to database node_ids for file senders
+            const nodePromises = users.map(async (user) => {
+                if (user.nodeId) {
                     try {
-                        const user = await invoke<{ firstName: string }>('get_user_by_node_id', {
-                            nodeId: file.nodeId
-                        });
-                        return { ...file, sender: user.firstName };
+                        const node = await invoke<{ nodeId: string }>('get_node_by_id', { id: user.nodeId });
+                        return { irohNodeId: node.nodeId, user };
                     } catch (error) {
-                        return file;
+                        return null;
                     }
-                })
-            );
+                }
+                return null;
+            });
+
+            const nodeMappings = await Promise.all(nodePromises);
+            const irohNodeToUserMap = new Map<string, User>();
+            nodeMappings.forEach(mapping => {
+                if (mapping) {
+                    irohNodeToUserMap.set(mapping.irohNodeId, mapping.user);
+                }
+            });
+
+            // Add sender name using the user map
+            const enhancedFiles = fetchedFiles.map((file) => {
+                const user = irohNodeToUserMap.get(file.nodeId);
+                return { ...file, sender: user?.firstName || 'Unknown' };
+            });
 
             setFiles(enhancedFiles);
             console.log('Loaded files:', enhancedFiles);
