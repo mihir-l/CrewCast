@@ -48,7 +48,8 @@ pub fn run() {
 		.setup(|app| {
 			async_runtime::block_on(async {
 				let password = std::env::var("DATABASE_PASSWORD").unwrap_or_else(|_| "password".into());
-				let data_dir = app.path().app_data_dir().expect("failed to get app data dir");
+				// let data_dir = app.path().app_data_dir().expect("failed to get app data dir");
+				let data_dir = std::env::current_dir().unwrap();
 				if !data_dir.exists() {
 					std::fs::create_dir_all(&data_dir).expect("failed to create data directory");
 				}

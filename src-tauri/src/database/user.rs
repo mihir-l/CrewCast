@@ -29,6 +29,7 @@ pub trait UserOperations {
 	async fn create_user(&self, user: User) -> Result<User>;
 	async fn get_user_by_id(&self, id: i64) -> Result<User>;
 	async fn get_user_by_node_id(&self, node_id: i64) -> Result<User>;
+	async fn get_users_by_node_ids(&self, node_ids: &[String]) -> Result<Vec<User>>;
 }
 
 impl UserOperations for Db {
@@ -78,5 +79,30 @@ impl UserOperations for Db {
 		.fetch_one(&self.0)
 		.await?;
 		Ok(user)
+	}
+
+	async fn get_users_by_node_ids(&self, node_ids: &[String]) -> Result<Vec<User>> {
+		if node_ids.is_empty() {
+			return Ok(vec![]);
+		}
+
+		let placeholders = node_ids.iter().map(|_| "?").collect::<Vec<_>>().join(", ");
+		let query = format!(
+			r#"
+			SELECT u.id, u.node_id, u.email, u.first_name, u.last_name
+			FROM users u
+			INNER JOIN nodes n ON u.node_id = n.id
+			WHERE n.node_id IN ({})
+			"#,
+			placeholders
+		);
+
+		let mut query_builder = sqlx::query_as::<_, User>(&query);
+		for node_id in node_ids {
+			query_builder = query_builder.bind(node_id);
+		}
+
+		let users = query_builder.fetch_all(&self.0).await?;
+		Ok(users)
 	}
 }
