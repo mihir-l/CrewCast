@@ -17,12 +17,10 @@ const TopicsListPage: React.FC = () => {
 
     const [topics, setTopics] = useState<Topic[]>([]);
     const [loading, setLoading] = useState(true);
-    const [searchQuery, setSearchQuery] = useState('');
     const [showCreateModal, setShowCreateModal] = useState(false);
     const [newTopicName, setNewTopicName] = useState('');
     const [showJoinModal, setShowJoinModal] = useState(false);
     const [joinTicket, setJoinTicket] = useState('');
-    const [generatedTicket, setGeneratedTicket] = useState('');
 
     const loadTopics = async () => {
         setLoading(true);
@@ -35,10 +33,6 @@ const TopicsListPage: React.FC = () => {
         loadTopics();
     }, []);
 
-    const filteredTopics = topics.filter(topic =>
-        topic.name.toLowerCase().includes(searchQuery.toLowerCase())
-    );
-
     const handleCreateTopic = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!newTopicName.trim()) {
@@ -48,10 +42,10 @@ const TopicsListPage: React.FC = () => {
 
         const ticket = await createTopic(newTopicName);
         if (ticket) {
-            setGeneratedTicket(ticket);
             setNewTopicName('');
             setShowCreateModal(false);
-            loadTopics();
+            // No need to reload topics or show ticket modal - 
+            // createTopic now auto-joins the new topic
         }
     };
 
@@ -120,25 +114,12 @@ const TopicsListPage: React.FC = () => {
                         </button>
                     </div>
                 </div>
-
-                <div className="search-container">
-                    <svg className="search-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                    </svg>
-                    <input
-                        type="text"
-                        placeholder="Search topics..."
-                        className="search-input"
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                    />
-                </div>
             </div>
 
             {/* Topics List */}
             <div className="sidebar-content">
                 <div className="section-header">
-                    Topics ({filteredTopics.length})
+                    Topics ({topics.length})
                 </div>
 
                 {loading ? (
@@ -150,7 +131,7 @@ const TopicsListPage: React.FC = () => {
                         </div>
                         <p>Loading topics...</p>
                     </div>
-                ) : filteredTopics.length === 0 ? (
+                ) : topics.length === 0 ? (
                     <div className="empty-state">
                         <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center">
                             <svg className="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -158,20 +139,18 @@ const TopicsListPage: React.FC = () => {
                             </svg>
                         </div>
                         <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">
-                            {searchQuery ? 'No topics found' : 'No topics yet'}
+                            No topics yet
                         </p>
-                        {!searchQuery && (
-                            <button
-                                onClick={() => setShowCreateModal(true)}
-                                className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-sm font-medium transition-colors"
-                            >
-                                Create your first topic
-                            </button>
-                        )}
+                        <button
+                            onClick={() => setShowCreateModal(true)}
+                            className="create-first-topic-btn"
+                        >
+                            Create your first topic
+                        </button>
                     </div>
                 ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                        {filteredTopics.map((topic, index) => (
+                        {topics.map((topic, index) => (
                             <div
                                 key={topic.id}
                                 onClick={() => handleTopicSelect(topic)}
@@ -329,39 +308,6 @@ const TopicsListPage: React.FC = () => {
                 </div>
             )}
 
-            {/* Generated Ticket Display */}
-            {generatedTicket && (
-                <div className="modal-overlay">
-                    <div className="modal">
-                        <div className="modal-header">
-                            <h3 className="modal-title">Topic Created!</h3>
-                            <button
-                                onClick={() => setGeneratedTicket('')}
-                                className="modal-close"
-                            >
-                                ✕
-                            </button>
-                        </div>
-                        <p style={{ color: 'var(--textSecondary)', fontSize: '0.875rem', marginBottom: '1rem' }}>
-                            Share this ticket to invite others to join your topic:
-                        </p>
-                        <div className="ticket-display">
-                            <div className="ticket-value">
-                                {generatedTicket}
-                            </div>
-                            <button
-                                onClick={() => {
-                                    navigator.clipboard.writeText(generatedTicket);
-                                    toast.success('Ticket copied to clipboard');
-                                }}
-                                className="btn btn-primary"
-                            >
-                                Copy
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
         </div>
     );
 };

@@ -36,9 +36,23 @@ export const TopicProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
     const createTopic = async (name: string): Promise<string> => {
         try {
-            const ticket = await invoke<string>('start_new_topic', { name });
+            const result = await invoke<any>('start_new_topic', { name });
             toast.success(`New topic "${name}" created successfully!`);
-            return ticket;
+
+            // Since the backend creates and joins the topic automatically,
+            // we need to fetch the updated topic list and set the new topic as current
+            try {
+                const topics = await fetchTopics();
+                const newTopic = topics.find(topic => topic.name === name);
+                if (newTopic) {
+                    setCurrentTopic(newTopic);
+                }
+            } catch (error) {
+                console.warn('Failed to fetch topics after creation:', error);
+            }
+
+            // Return the ticket if it's available in the result
+            return typeof result === 'string' ? result : result?.ticket || '';
         } catch (error) {
             console.error('Failed to create topic:', error);
             toast.error('Failed to create topic');
