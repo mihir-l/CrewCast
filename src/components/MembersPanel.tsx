@@ -3,14 +3,19 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { toast } from 'react-toastify';
 import { Member, User } from '../types/interfaces';
+import { useUser } from '../contexts/UserContext';
 
 interface MembersPanelProps {
     topicId: string;
 }
 
+// Activity timeout constant - users are inactive if not seen within this time
+const ACTIVITY_TIMEOUT_MS = 10 * 1000; // 10 seconds
+
 const MembersPanel: React.FC<MembersPanelProps> = ({ topicId }) => {
     const [members, setMembers] = useState<Member[]>([]);
     const [loading, setLoading] = useState(true);
+    const { currentUser } = useUser();
 
     const fetchMembers = async () => {
         setLoading(true);
@@ -18,64 +23,29 @@ const MembersPanel: React.FC<MembersPanelProps> = ({ topicId }) => {
             // Use get_users_by_topic_id to get all users for the topic efficiently
             const users = await invoke<User[]>('get_users_by_topic_id', { topicId });
 
-            // Get topic info to get all member node_ids
-            const topic = await invoke<{ members: string[] }>('get_topic_by_topic_id', { topicId });
-
-            if (!topic.members) {
-                setMembers([]);
-                setLoading(false);
-                return;
-            }
-
-            // For each user, get their node info to map to iroh node_id
-            // This is more efficient than individual get_user_by_node_id calls
-            const userNodePromises = users.map(async (user) => {
-                if (user.nodeId) {
-                    try {
-                        const node = await invoke<{ nodeId: string }>('get_node_by_id', { id: user.nodeId });
-                        return { user, irohNodeId: node.nodeId };
-                    } catch (error) {
-                        return null;
+            // Convert users to members format, getting the actual iroh node ID for each user
+            const fetchedMembers: Member[] = await Promise.all(
+                users.map(async (user) => {
+                    let irohNodeId = '';
+                    if (user.nodeId) {
+                        try {
+                            const node = await invoke<{ nodeId: string }>('get_node_by_id', { id: user.nodeId });
+                            irohNodeId = node.nodeId;
+                        } catch (error) {
+                            console.error('Failed to get node for user:', user.id, error);
+                        }
                     }
-                }
-                return null;
-            });
 
-            const userNodeMappings = await Promise.all(userNodePromises);
-
-            // Create a map of users by iroh node_id
-            const userMap = new Map<string, User>();
-            userNodeMappings.forEach(mapping => {
-                if (mapping) {
-                    userMap.set(mapping.irohNodeId, mapping.user);
-                }
-            });
-
-            // Map all members (including those without user records)
-            const fetchedMembers: Member[] = topic.members.map((nodeId) => {
-                const user = userMap.get(nodeId);
-
-                if (user) {
                     return {
-                        nodeId,
+                        nodeId: irohNodeId,
                         firstName: user.firstName,
                         lastName: user.lastName,
                         lastSeen: Date.now(),
                         isActive: true
                     };
-                } else {
-                    // Member without user record
-                    return {
-                        nodeId,
-                        firstName: 'Unknown User',
-                        lastName: undefined,
-                        lastSeen: 0,
-                        isActive: false
-                    };
-                }
-            });
-
-            setMembers(fetchedMembers);
+                })
+            );
+            setMembers(fetchedMembers.filter(member => member.nodeId)); // Filter out members without valid node IDs
         } catch (error) {
             console.error('Failed to fetch members:', error);
             toast.error('Could not load topic members');
@@ -102,33 +72,41 @@ const MembersPanel: React.FC<MembersPanelProps> = ({ topicId }) => {
 
                     setMembers(prev => {
                         const existingMemberIndex = prev.findIndex(m => m.nodeId === sender);
+                        const now = Date.now();
 
+                        let updatedMembers;
                         if (existingMemberIndex >= 0) {
                             // Update existing member
-                            const updatedMembers = [...prev];
+                            updatedMembers = [...prev];
                             updatedMembers[existingMemberIndex] = {
                                 ...updatedMembers[existingMemberIndex],
                                 firstName: meta.first_name || meta.firstName || updatedMembers[existingMemberIndex].firstName,
                                 lastName: meta.last_name || meta.lastName,
-                                lastSeen: Date.now(),
+                                lastSeen: now,
                                 isActive: true
                             };
-                            return updatedMembers;
                         } else {
                             // Add new member
                             const newMember = {
                                 nodeId: sender,
                                 firstName: meta.first_name || meta.firstName || 'Unknown',
                                 lastName: meta.last_name || meta.lastName,
-                                lastSeen: Date.now(),
+                                lastSeen: now,
                                 isActive: true
                             };
 
                             // Show a toast notification for new members
                             toast.info(`${newMember.firstName} joined the topic`);
 
-                            return [...prev, newMember];
+                            updatedMembers = [...prev, newMember];
                         }
+
+                        // Update activity status for all members after receiving any check-in
+                        return updatedMembers.map(member => ({
+                            ...member,
+                            isActive: member.nodeId === currentUser?.nodeId ||
+                                now - member.lastSeen < ACTIVITY_TIMEOUT_MS
+                        }));
                     });
                 }
             } catch (error) {
@@ -136,15 +114,17 @@ const MembersPanel: React.FC<MembersPanelProps> = ({ topicId }) => {
             }
         });
 
-        // Update activity status every 30 seconds
+        // Update activity status every 5 seconds for more responsive status updates
         const activityInterval = setInterval(() => {
             setMembers(prev =>
                 prev.map(member => ({
                     ...member,
-                    isActive: Date.now() - member.lastSeen < 60000 // Active if seen in the last minute
+                    // Current user is always active, others are active if seen within ACTIVITY_TIMEOUT_MS
+                    isActive: member.nodeId === currentUser?.nodeId ||
+                        Date.now() - member.lastSeen < ACTIVITY_TIMEOUT_MS
                 }))
             );
-        }, 30000);
+        }, 5000); // Check every 5 seconds for more responsive updates
 
         return () => {
             unlistenGossipMessage.then(fn => fn());
@@ -154,34 +134,61 @@ const MembersPanel: React.FC<MembersPanelProps> = ({ topicId }) => {
 
     return (
         <div className="members-panel">
-            <h2>Members</h2>
-
-            {loading ? (
-                <div className="loading">Loading members...</div>
-            ) : members.length === 0 ? (
-                <div className="no-members">
-                    <p>No members found in this topic</p>
+            <div className="panel-header">
+                <h2 className="panel-title">Members</h2>
+                <div className="members-count">
+                    {members.length} member{members.length !== 1 ? 's' : ''}
                 </div>
-            ) : (
-                <ul className="members-list">
-                    {members.map((member) => (
-                        <li key={member.nodeId} className={`member-item ${member.isActive ? 'active' : 'inactive'}`}>
-                            <div className="member-avatar">
-                                {member.firstName.charAt(0).toUpperCase()}
-                            </div>
-                            <div className="member-info">
-                                <div className="member-name">
-                                    {member.firstName} {member.lastName || ''}
+            </div>
+
+            <div className="panel-content">
+                {loading ? (
+                    <div className="loading-state">
+                        <div className="loading-spinner"></div>
+                        <p>Loading members...</p>
+                    </div>
+                ) : members.length === 0 ? (
+                    <div className="empty-state">
+                        <div className="empty-icon">
+                            <svg className="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                            </svg>
+                        </div>
+                        <p className="empty-title">No members yet</p>
+                        <p className="empty-subtitle">Invite others to join this topic</p>
+                    </div>
+                ) : (
+                    <div className="members-list">
+                        {members.map((member) => (
+                            <div key={member.nodeId} className={`member-card ${member.isActive ? 'active' : 'inactive'}`}>
+                                <div className="member-avatar">
+                                    <div className="avatar-circle">
+                                        {member.firstName.charAt(0).toUpperCase()}
+                                    </div>
+                                    <div className={`status-dot ${member.isActive ? 'online' : 'offline'}`}></div>
                                 </div>
-                                <div className="member-status">
-                                    {member.isActive ? 'Active' : 'Inactive'}
+                                <div className="member-info">
+                                    <div className="member-name">
+                                        {member.firstName} {member.lastName || ''}
+                                    </div>
+                                    <div className="member-status">
+                                        <span className={`status-text ${member.isActive ? 'active' : 'inactive'}`}>
+                                            {member.isActive ? 'Active now' : 'Inactive'}
+                                        </span>
+                                    </div>
+                                </div>
+                                <div className="member-actions">
+                                    <button className="member-action-btn" title="More options">
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
+                                        </svg>
+                                    </button>
                                 </div>
                             </div>
-                            <div className={`status-indicator ${member.isActive ? 'online' : 'offline'}`}></div>
-                        </li>
-                    ))}
-                </ul>
-            )}
+                        ))}
+                    </div>
+                )}
+            </div>
         </div>
     );
 };
